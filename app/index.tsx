@@ -11,10 +11,10 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useHistoryStore } from '../src/store/historyStore';
 import { useWorkoutStore } from '../src/store/workoutStore';
-import { getTodayWorkout, getNextWorkout } from '../src/data/workouts';
+import { getTodayWorkout, getNextWorkout, WORKOUTS } from '../src/data/workouts';
 import { getAdaptedTiming, estimateTotalDuration } from '../src/utils/timing';
 import { formatTime } from '../src/utils/time';
-import { Exercise } from '../src/types';
+import { Exercise, WorkoutDay } from '../src/types';
 
 function ClockIcon() {
   return (
@@ -66,16 +66,42 @@ export default function HomeScreen() {
   const today = getTodayWorkout();
   const nextWorkout = getNextWorkout();
 
-  function handleStartWorkout() {
-    if (!today) return;
+  function handleStartWorkout(workout: WorkoutDay | null = today) {
+    if (!workout) return;
     const sessionId = Crypto.randomUUID();
-    startWorkout(today, sessionId);
-    const firstEx = today.exercises.find((e) => e.type !== 'CARDIO');
+    startWorkout(workout, sessionId);
+    const firstEx = workout.exercises.find((e) => e.type !== 'CARDIO');
     if (firstEx) {
       const timing = getAdaptedTiming(firstEx.id, firstEx.type, timingRecords, settings);
       startSet(timing.setDuration);
     }
     router.push('/workout');
+  }
+
+  function DayPicker({ label }: { label: string }) {
+    const days: Array<{ key: keyof typeof WORKOUTS; tag: string }> = [
+      { key: 'monday', tag: 'MON' },
+      { key: 'tuesday', tag: 'TUE' },
+      { key: 'thursday', tag: 'THU' },
+      { key: 'friday', tag: 'FRI' },
+    ];
+    return (
+      <View style={styles.pickerWrap}>
+        <Text style={styles.pickerLabel}>{label}</Text>
+        <View style={styles.pickerRow}>
+          {days.map((d) => (
+            <TouchableOpacity
+              key={d.key}
+              style={[styles.pickerChip, today?.day === d.key && styles.pickerChipActive]}
+              onPress={() => handleStartWorkout(WORKOUTS[d.key])}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.pickerChipText}>{d.tag}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+    );
   }
 
   if (!today) {
@@ -100,6 +126,7 @@ export default function HomeScreen() {
               {nextWorkout.name} — {nextWorkout.muscleGroups}
             </Text>
           )}
+          <DayPicker label="Or start any workout" />
         </View>
       </SafeAreaView>
     );
@@ -143,7 +170,8 @@ export default function HomeScreen() {
       </ScrollView>
 
       <View style={styles.ctaContainer}>
-        <TouchableOpacity style={styles.startBtn} onPress={handleStartWorkout} activeOpacity={0.85}>
+        <DayPicker label="Switch workout" />
+        <TouchableOpacity style={styles.startBtn} onPress={() => handleStartWorkout()} activeOpacity={0.85}>
           <Text style={styles.startBtnText}>▶  START WORKOUT</Text>
         </TouchableOpacity>
       </View>
@@ -210,6 +238,16 @@ const styles = StyleSheet.create({
   restDayCenter: {
     flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24,
   },
+  pickerWrap: { alignItems: 'center', marginTop: 16 },
+  pickerLabel: { fontSize: 10, fontWeight: '600', color: '#666', textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 8 },
+  pickerRow: { flexDirection: 'row', gap: 8 },
+  pickerChip: {
+    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8,
+    backgroundColor: '#1C1C1C', borderWidth: 1, borderColor: '#2A2A2A',
+  },
+  pickerChipActive: { borderColor: '#22D46E' },
+  pickerChipText: { color: '#F0F0F0', fontSize: 12, fontWeight: '700', letterSpacing: 1 },
+
   restEmoji: { fontSize: 64 },
   restTitle: { fontSize: 36, fontWeight: '900', color: '#888', letterSpacing: -1, marginTop: 24 },
   restSubtitle: { fontSize: 15, color: '#888', textAlign: 'center', marginTop: 8, lineHeight: 22, maxWidth: 260 },
