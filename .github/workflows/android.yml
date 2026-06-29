@@ -36,6 +36,23 @@ jobs:
       - name: Expo prebuild
         run: npx expo prebuild --platform android --no-install
 
+      - name: Bundle JS in debug builds
+        # By default react-native-gradle-plugin skips JS bundling for "debug"
+        # variants (the bundle is served from Metro). For sideloaded testing
+        # we want the bundle baked in so the APK runs standalone.
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('android/app/build.gradle')
+          src = p.read_text()
+          marker = 'bundleCommand = "export:embed"'
+          if marker not in src:
+              raise SystemExit('bundleCommand marker not found in build.gradle')
+          src = src.replace(marker, marker + '\n    debuggableVariants = []')
+          p.write_text(src)
+          print('debug bundling enabled')
+          PY
+
       - name: Build debug APK
         working-directory: android
         run: ./gradlew assembleDebug --stacktrace
