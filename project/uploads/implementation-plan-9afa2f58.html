@@ -1,0 +1,1792 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Workout Timer — Implementation Plan</title>
+<style>
+  :root {
+    --bg: #0f1117; --surface: #1a1d27; --card: #22263a;
+    --green: #22D46E; --amber: #F59E0B; --blue: #3B82F6;
+    --red: #EF4444; --text: #e8eaf0; --muted: #8b91a8;
+    --border: #2d3248;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Inter', system-ui, sans-serif; font-size: 14px; line-height: 1.6; }
+  .header { background: linear-gradient(135deg, #0A0A0A 0%, #1a1d27 100%); padding: 40px 40px 32px; border-bottom: 1px solid var(--border); }
+  .header h1 { font-size: 28px; font-weight: 700; color: var(--green); letter-spacing: -0.5px; }
+  .header p { color: var(--muted); margin-top: 6px; font-size: 13px; }
+  .badge { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; }
+  .badge-green { background: rgba(34,212,110,0.12); color: var(--green); border: 1px solid rgba(34,212,110,0.25); }
+  .badge-amber { background: rgba(245,158,11,0.12); color: var(--amber); border: 1px solid rgba(245,158,11,0.25); }
+  .badge-blue { background: rgba(59,130,246,0.12); color: var(--blue); border: 1px solid rgba(59,130,246,0.25); }
+  .badges { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+  nav { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 40px; display: flex; gap: 0; overflow-x: auto; }
+  nav a { color: var(--muted); text-decoration: none; padding: 14px 16px; font-size: 13px; font-weight: 500; white-space: nowrap; border-bottom: 2px solid transparent; transition: all 0.2s; }
+  nav a:hover { color: var(--text); }
+  nav a.active { color: var(--green); border-bottom-color: var(--green); }
+  main { max-width: 1100px; margin: 0 auto; padding: 40px; }
+  section { margin-bottom: 56px; }
+  h2 { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 20px; padding-bottom: 12px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; }
+  h2 .phase-num { background: var(--green); color: #000; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; flex-shrink: 0; }
+  h3 { font-size: 15px; font-weight: 600; color: var(--text); margin: 24px 0 12px; }
+  h4 { font-size: 13px; font-weight: 600; color: var(--amber); margin: 16px 0 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+  p { color: var(--muted); margin-bottom: 10px; }
+  ul, ol { color: var(--muted); padding-left: 20px; margin-bottom: 12px; }
+  li { margin-bottom: 4px; }
+  li strong { color: var(--text); }
+  code { background: #0d1117; border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--green); }
+  pre { background: #0d1117; border: 1px solid var(--border); border-radius: 8px; padding: 20px; overflow-x: auto; margin: 12px 0 20px; }
+  pre code { background: none; border: none; padding: 0; color: #a8c7fa; font-size: 12px; line-height: 1.7; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; margin-bottom: 16px; }
+  .card-title { font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 8px; }
+  .task-grid { display: grid; gap: 12px; }
+  .task { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; }
+  .task-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; margin-bottom: 6px; }
+  .task-name { font-size: 13px; font-weight: 600; color: var(--text); }
+  .task-body { font-size: 12px; color: var(--muted); line-height: 1.5; }
+  .ac { background: rgba(34,212,110,0.06); border: 1px solid rgba(34,212,110,0.2); border-radius: 6px; padding: 10px 14px; margin-top: 10px; }
+  .ac-label { font-size: 10px; font-weight: 700; color: var(--green); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 4px; }
+  .ac-text { font-size: 12px; color: #8bc4a0; }
+  .screen-layout { background: #0A0A0A; border: 1px solid var(--border); border-radius: 12px; padding: 20px; font-family: 'JetBrains Mono', monospace; font-size: 11px; line-height: 1.6; color: #6b7a99; margin: 12px 0; white-space: pre; }
+  .screen-layout .hl { color: var(--green); }
+  .screen-layout .hl-blue { color: var(--blue); }
+  .screen-layout .hl-amber { color: var(--amber); }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .warn { background: rgba(245,158,11,0.06); border: 1px solid rgba(245,158,11,0.2); border-radius: 8px; padding: 12px 16px; margin: 12px 0; }
+  .warn-label { font-size: 11px; font-weight: 700; color: var(--amber); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+  .info { background: rgba(59,130,246,0.06); border: 1px solid rgba(59,130,246,0.2); border-radius: 8px; padding: 12px 16px; margin: 12px 0; }
+  .info-label { font-size: 11px; font-weight: 700; color: var(--blue); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+  th { background: var(--card); color: var(--text); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--border); }
+  td { padding: 10px 14px; font-size: 12px; color: var(--muted); border-bottom: 1px solid rgba(45,50,72,0.5); }
+  td code { font-size: 11px; }
+  tr:last-child td { border-bottom: none; }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 700; }
+  .pill-green { background: rgba(34,212,110,0.15); color: var(--green); }
+  .pill-amber { background: rgba(245,158,11,0.15); color: var(--amber); }
+  .pill-blue { background: rgba(59,130,246,0.15); color: var(--blue); }
+  .pill-red { background: rgba(239,68,68,0.15); color: var(--red); }
+  @media (max-width: 700px) { main { padding: 20px; } .two-col { grid-template-columns: 1fr; } nav { padding: 0 20px; } .header { padding: 24px 20px; } }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>⏱ Workout Timer</h1>
+  <p>Adaptive set &amp; break timer for Brian's 4-day lifting programme — Expo (React Native) → Android APK via GitHub Actions</p>
+  <div class="badges">
+    <span class="badge badge-green">Expo SDK 53</span>
+    <span class="badge badge-amber">Android APK</span>
+    <span class="badge badge-blue">TypeScript</span>
+    <span class="badge badge-green">No Backend</span>
+    <span class="badge badge-amber">Adaptive Learning</span>
+    <span class="badge badge-blue">Dark OLED UI</span>
+  </div>
+</div>
+
+<nav>
+  <a href="#phase0" class="active">P0 Setup</a>
+  <a href="#phase1">P1 Data Layer</a>
+  <a href="#phase2">P2 Timer Engine</a>
+  <a href="#phase3">P3 Components</a>
+  <a href="#phase4">P4 Screens</a>
+  <a href="#phase5">P5 CI/Build</a>
+  <a href="#design">Design Spec</a>
+</nav>
+
+<main>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<section id="design">
+<h2><span class="phase-num">✦</span> Design Specification</h2>
+
+<h3>Colour Palette (OLED Dark)</h3>
+<table>
+  <tr><th>Token</th><th>Hex</th><th>Usage</th></tr>
+  <tr><td><code>bg</code></td><td><code>#0A0A0A</code></td><td>Screen background — true near-black for OLED power saving</td></tr>
+  <tr><td><code>surface1</code></td><td><code>#111111</code></td><td>Cards, exercise list rows</td></tr>
+  <tr><td><code>surface2</code></td><td><code>#1C1C1C</code></td><td>Elevated modals, bottom sheets</td></tr>
+  <tr><td><code>surface3</code></td><td><code>#262626</code></td><td>Active/selected state backgrounds</td></tr>
+  <tr><td><code>accent-green</code></td><td><code>#22D46E</code></td><td>SET phase ring, DONE button, T1 active</td></tr>
+  <tr><td><code>accent-blue</code></td><td><code>#3B82F6</code></td><td>BREAK phase ring, START SET button</td></tr>
+  <tr><td><code>accent-amber</code></td><td><code>#F59E0B</code></td><td>T1 badge, 90 min target reached tint</td></tr>
+  <tr><td><code>danger</code></td><td><code>#EF4444</code></td><td>Overtime ring, 2hr warning</td></tr>
+  <tr><td><code>text-primary</code></td><td><code>#F0F0F0</code></td><td>Headings, important numbers</td></tr>
+  <tr><td><code>text-secondary</code></td><td><code>#888888</code></td><td>Labels, subtext</td></tr>
+  <tr><td><code>border</code></td><td><code>#2A2A2A</code></td><td>Dividers, card outlines</td></tr>
+</table>
+
+<h3>Screen Layouts</h3>
+
+<div class="two-col">
+<div>
+<h4>Home Screen</h4>
+<div class="screen-layout">┌──────────────────────┐
+│  WORKOUT TIMER  ⚙  📊 │
+├──────────────────────┤
+│                      │
+│  <span class="hl">MONDAY</span>               │
+│  Chest · Biceps · Abs│
+│                      │
+│  ┌──────────────────┐│
+│  │ 7 exercises      ││
+│  │ <span class="hl">~52 min</span> · 4 sets ││
+│  └──────────────────┘│
+│                      │
+│  <span class="hl-amber">T1</span> Flat Barbell     │
+│     Bench Press      │
+│  ○  Incline DB Bench │
+│  ○  Landmine Chest   │
+│  ○  Barbell Curls    │
+│  ○  ...              │
+│                      │
+│  ┌──────────────────┐│
+│  │  <span class="hl">▶  START WORKOUT</span> ││
+│  └──────────────────┘│
+└──────────────────────┘</div>
+</div>
+<div>
+<h4>Workout — SET Phase</h4>
+<div class="screen-layout">┌──────────────────────┐
+│  ✕    <span class="hl">0:23:45</span>  [90m●] │
+├──────────────────────┤
+│  Flat Barbell Bench  │
+│  Press <span class="hl-amber">[T1]</span>          │
+│  SET 2 OF 4 · 8-10r  │
+│                      │
+│      ┌────────┐      │
+│    ╱  <span class="hl">00:47</span>   ╲    │
+│   │  elapsed  │   │
+│    ╲           ╱    │
+│      └────────┘      │
+│   target: 1:00       │
+│                      │
+│   <span class="hl">●</span> ● ○ ○  (2/4)     │
+│                      │
+│  ┌──────────────────┐│
+│  │    <span class="hl">✓  DONE</span>       ││
+│  └──────────────────┘│
+└──────────────────────┘</div>
+</div>
+</div>
+
+<div class="two-col">
+<div>
+<h4>Workout — BREAK Phase</h4>
+<div class="screen-layout">┌──────────────────────┐
+│  ✕    <span class="hl">0:24:58</span>  [90m●] │
+├──────────────────────┤
+│  Flat Barbell Bench  │
+│  BREAK · SET 3 NEXT  │
+│                      │
+│      ┌────────┐      │
+│    ╱  <span class="hl-blue">2:03</span>    ╲    │
+│   │ remaining │   │
+│    ╲           ╱    │
+│      └────────┘      │
+│   target: 2:30       │
+│                      │
+│  ┌──────────────────┐│
+│  │  <span class="hl-blue">▶  START NEXT SET</span>││
+│  └──────────────────┘│
+│  ┌──────────────────┐│
+│  │    SKIP BREAK    ││
+│  └──────────────────┘│
+└──────────────────────┘</div>
+</div>
+<div>
+<h4>Workout — Overtime Break</h4>
+<div class="screen-layout">┌──────────────────────┐
+│  ✕    <span class="hl">0:27:12</span>  [90m●] │
+├──────────────────────┤
+│  Flat Barbell Bench  │
+│  BREAK · SET 3 NEXT  │
+│                      │
+│      ┌────────┐      │
+│    ╱  <span class="pill-red">+0:45</span>  ╲    │
+│   │ OVERTIME  │   │
+│    ╲           ╱    │
+│      └────────┘      │
+│   target: 2:30       │
+│                      │
+│  ┌──────────────────┐│
+│  │  <span class="hl-blue">▶  START NEXT SET</span>││
+│  └──────────────────┘│
+│  ┌──────────────────┐│
+│  │    SKIP BREAK    ││
+│  └──────────────────┘│
+└──────────────────────┘</div>
+</div>
+</div>
+
+<h3>Circular Timer Ring — SVG Spec</h3>
+<div class="card">
+  <p>Centre of screen. <code>r = 110</code>, <code>cx = cy = 140</code>, <code>strokeWidth = 10</code>. Background circle: <code>stroke="#1C1C1C"</code>. Progress arc: <code>strokeDasharray={circumference}</code> driven by Reanimated <code>useAnimatedProps</code>.</p>
+  <ul>
+    <li><strong>SET phase:</strong> Progress arc fills clockwise from 0 → target. Colour: <code>#22D46E</code>. Timer counts UP inside. Past target: ring pulses green (Reanimated repeating), timer keeps going.</li>
+    <li><strong>BREAK phase:</strong> Progress arc depletes clockwise from full → 0. Colour: <code>#3B82F6</code>. Timer counts DOWN inside. Past 0: arc turns <code>#EF4444</code>, inner text shows <code>+MM:SS</code> in red.</li>
+    <li><strong>AMRAP/Failure:</strong> Ring shows static open-arc animation (spinning). No target. Text says "GO" then counts up. DONE button is the only control.</li>
+    <li><strong>TIMED (Plank):</strong> Same as SET phase but with fixed <code>setDuration=60</code>.</li>
+  </ul>
+</div>
+
+<h3>Alert Behaviour</h3>
+<div class="card">
+  <ul>
+    <li>When SET timer reaches target: play <code>beep.mp3</code> (2 beeps) + <code>expo-haptics</code> heavy impact × 2, then <strong>silence</strong>. Timer continues counting up. DONE button still visible.</li>
+    <li>When BREAK timer reaches 0: play <code>beep.mp3</code> (3 beeps) + <code>expo-haptics</code> heavy impact × 3, then <strong>silence</strong>. Timer goes into overtime (red). START SET still visible.</li>
+    <li>At 90 min elapsed: Elapsed clock badge turns amber. Subtle haptic. No interruption.</li>
+    <li>At 120 min elapsed: Full-screen overlay warning, 1 large dismiss button. Haptic + longer tone.</li>
+    <li>User can stop sound/vibration at any time by tapping the DONE or START SET button (which records the tap and advances state anyway).</li>
+  </ul>
+</div>
+
+<h3>Thumb-Zone Layout Rules</h3>
+<div class="card">
+  <ul>
+    <li>Primary action button (DONE / START NEXT SET): bottom 20% of screen, full width minus 24px padding, height 64px, border-radius 16px.</li>
+    <li>Secondary action (SKIP BREAK): directly above primary, 48px height, outline style.</li>
+    <li>Abandon workout button (✕): top-left, 44×44px tap target.</li>
+    <li>Exercise name + set counter: middle zone (informational, not interactive).</li>
+    <li>Circular ring: fills remaining vertical space between header and buttons.</li>
+  </ul>
+</div>
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<section id="phase0">
+<h2><span class="phase-num">0</span> Project Setup &amp; Tooling</h2>
+
+<div class="task-grid">
+
+<div class="task">
+  <div class="task-header"><span class="task-name">0.1 — Initialise Expo project</span><span class="badge badge-green">FIRST</span></div>
+  <div class="task-body">
+    <p>Run the following from your projects directory:</p>
+    <pre><code>npx create-expo-app@latest workout-timer --template blank-typescript
+cd workout-timer</code></pre>
+    <p>Then install all dependencies in one pass:</p>
+    <pre><code>npx expo install \
+  expo-router \
+  expo-keep-awake \
+  expo-haptics \
+  expo-av \
+  react-native-reanimated \
+  react-native-svg \
+  react-native-gesture-handler \
+  react-native-safe-area-context \
+  react-native-screens \
+  @react-native-async-storage/async-storage
+
+npm install zustand uuid
+npm install -D @types/uuid</code></pre>
+  </div>
+  <div class="ac"><div class="ac-label">✓ Acceptance</div><div class="ac-text"><code>npx expo start</code> launches without errors. Metro bundler reports 0 warnings on the default screen.</div></div>
+</div>
+
+<div class="task">
+  <div class="task-header"><span class="task-name">0.2 — Configure app.json</span><span class="badge badge-amber">REQUIRED</span></div>
+  <div class="task-body">
+    <p>Replace the generated <code>app.json</code> with the configuration below. Critical fields: <code>scheme</code> for Expo Router, <code>android.package</code> for APK identity, and permissions.</p>
+    <pre><code>{
+  "expo": {
+    "name": "Workout Timer",
+    "slug": "workout-timer",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "workouttimer",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0A0A0A",
+    "android": {
+      "package": "com.briangitau.workouttimer",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#0A0A0A"
+      },
+      "permissions": [
+        "VIBRATE",
+        "WAKE_LOCK"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-av",
+      [
+        "expo-keep-awake",
+        { "preventSleepDuringPlayback": true }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}</code></pre>
+  </div>
+  <div class="ac"><div class="ac-label">✓ Acceptance</div><div class="ac-text">No Expo warnings about missing config fields. <code>scheme</code> is set (required for Expo Router).</div></div>
+</div>
+
+<div class="task">
+  <div class="task-header"><span class="task-name">0.3 — Configure Babel &amp; TypeScript</span><span class="badge badge-green">SETUP</span></div>
+  <div class="task-body">
+    <p>Update <code>babel.config.js</code>:</p>
+    <pre><code>module.exports = function (api) {
+  api.cache(true);
+  return {
+    presets: ['babel-preset-expo'],
+    plugins: ['react-native-reanimated/plugin'],
+  };
+};</code></pre>
+    <p>Update <code>tsconfig.json</code>:</p>
+    <pre><code>{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  }
+}</code></pre>
+    <p>Create directory structure:</p>
+    <pre><code>mkdir -p src/{components,data,store,utils,types,hooks}
+mkdir -p app/workout
+touch src/types/index.ts
+touch src/data/workouts.ts
+touch src/utils/timing.ts
+touch src/store/workoutStore.ts
+touch src/store/historyStore.ts</code></pre>
+  </div>
+  <div class="ac"><div class="ac-label">✓ Acceptance</div><div class="ac-text">TypeScript compiles with <code>npx tsc --noEmit</code> on an empty file with no errors. Path aliases resolve.</div></div>
+</div>
+
+<div class="task">
+  <div class="task-header"><span class="task-name">0.4 — Root Expo Router layout</span><span class="badge badge-green">SETUP</span></div>
+  <div class="task-body">
+    <p>Create <code>app/_layout.tsx</code> — root layout with gesture handler, safe area, and theme.</p>
+    <pre><code>import { Stack } from 'expo-router';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
+
+export default function RootLayout() {
+  return (
+    &lt;GestureHandlerRootView style={{ flex: 1, backgroundColor: '#0A0A0A' }}&gt;
+      &lt;SafeAreaProvider&gt;
+        &lt;StatusBar style="light" backgroundColor="#0A0A0A" /&gt;
+        &lt;Stack
+          screenOptions={{
+            headerShown: false,
+            contentStyle: { backgroundColor: '#0A0A0A' },
+            animation: 'slide_from_right',
+          }}
+        /&gt;
+      &lt;/SafeAreaProvider&gt;
+    &lt;/GestureHandlerRootView&gt;
+  );
+}</code></pre>
+    <p>Create placeholder screens: <code>app/index.tsx</code>, <code>app/workout/index.tsx</code>, <code>app/complete.tsx</code>, <code>app/history.tsx</code>, <code>app/settings.tsx</code> — each returning a <code>&lt;View&gt;</code> with the screen name as a <code>&lt;Text&gt;</code>.</p>
+  </div>
+  <div class="ac"><div class="ac-label">✓ Acceptance</div><div class="ac-text">App launches to Home screen (placeholder). Navigation between all screens works. No gesture handler or safe area errors.</div></div>
+</div>
+
+<div class="task">
+  <div class="task-header"><span class="task-name">0.5 — Add sound asset</span><span class="badge badge-blue">ASSET</span></div>
+  <div class="task-body">
+    <p>Download a simple double-beep alert sound. Create <code>assets/sounds/</code> directory.</p>
+    <pre><code>mkdir -p assets/sounds</code></pre>
+    <p>Options for the beep sound file:</p>
+    <ul>
+      <li>Use a short 440Hz sine wave generated programmatically on first run via expo-av AudioContext</li>
+      <li>Or include a tiny pre-made beep .mp3 (&lt;10KB) committed to the repo</li>
+    </ul>
+    <p>Recommended: use the <code>expo-av</code> <code>Audio.Sound.createAsync</code> with a base64 URI to keep the repo clean — generate a short 2-beep tone using the Web Audio API approach via expo-av. Alternatively include <code>assets/sounds/beep.mp3</code> committed to git (permissively licensed, e.g. from freesound.org).</p>
+    <div class="warn"><div class="warn-label">⚠ Note</div>Sound file must be committed to git so it's available in the GitHub Actions build. Do not .gitignore it.</div>
+  </div>
+  <div class="ac"><div class="ac-label">✓ Acceptance</div><div class="ac-text">Sound plays correctly in Expo Go and in a production APK build.</div></div>
+</div>
+
+</div><!-- /task-grid -->
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<section id="phase1">
+<h2><span class="phase-num">1</span> Data Layer — Types, Programme &amp; Storage</h2>
+
+<div class="task-grid">
+
+<div class="task">
+  <div class="task-header"><span class="task-name">1.1 — TypeScript types</span><span class="badge badge-green">TYPES</span></div>
+  <div class="task-body">
+    <p>Write all types in <code>src/types/index.ts</code>:</p>
+    <pre><code>export type ExerciseType = 'TIER1' | 'STANDARD' | 'AMRAP' | 'TIMED' | 'CARDIO';
+
+export interface Exercise {
+  id: string;
+  name: string;
+  type: ExerciseType;
+  sets: number;
+  reps: string; // "8-10", "10", "Failure", "AMRAP", "1 min"
+}
+
+export type WorkoutDayKey = 'monday' | 'tuesday' | 'thursday' | 'friday';
+
+export interface WorkoutDay {
+  day: WorkoutDayKey;
+  dayOfWeek: number; // 1=Mon, 2=Tue, 4=Thu, 5=Fri
+  name: string;
+  muscleGroups: string;
+  exercises: Exercise[];
+}
+
+export interface TimingRecord {
+  id: string;
+  exerciseId: string;
+  setNumber: number;
+  setDuration: number | null; // seconds; null = AMRAP
+  breakDuration: number;
+  date: string; // ISO
+  sessionId: string;
+}
+
+export interface SetRecord {
+  exerciseId: string;
+  exerciseName: string;
+  setNumber: number;
+  predictedSetDuration: number | null;
+  actualSetDuration: number;
+  predictedBreakDuration: number;
+  actualBreakDuration: number;
+  completedAt: string;
+}
+
+export interface WorkoutSession {
+  id: string;
+  day: WorkoutDayKey;
+  date: string; // ISO
+  totalDuration: number; // seconds
+  exercisesCompleted: number;
+  setRecords: SetRecord[];
+}
+
+export interface UserSettings {
+  tier1SetDuration: number;    // default 60
+  tier1BreakDuration: number;  // default 150
+  standardSetDuration: number; // default 40
+  standardBreakDuration: number; // default 90
+  timedBreakDuration: number;  // default 60
+  targetWorkoutMinutes: number; // default 90
+  warningWorkoutMinutes: number; // default 120
+  minSessionsForAdaptation: number; // default 3
+}
+
+// Active workout state types
+export type TimerPhase = 'SET' | 'BREAK' | 'AMRAP' | 'TIMED' | 'IDLE' | 'COMPLETE';
+
+export interface ActiveSet {
+  exerciseIndex: number;
+  setNumber: number; // 1-based
+  phase: TimerPhase;
+  startedAt: number; // Date.now()
+  targetDuration: number | null; // null for AMRAP
+  alertFired: boolean;
+}
+</code></pre>
+  </div>
+  <div class="ac"><div class="ac-label">✓ Acceptance</div><div class="ac-text"><code>npx tsc --noEmit</code> passes. All other files can import types without errors.</div></div>
+</div>
+
+<div class="task">
+  <div class="task-header"><span class="task-name">1.2 — Hardcoded workout programme</span><span class="badge badge-amber">DATA</span></div>
+  <div class="task-body">
+    <p>Write <code>src/data/workouts.ts</code> with the full programme from Brian's PDF. Do NOT include cardio finishers (HIIT Rowing, Endurance Rowing) in the exercises array — these are excluded from the timer flow.</p>
+    <pre><code>import { WorkoutDay } from '@/types';
+
+export const WORKOUT_PROGRAMME: WorkoutDay[] = [
+  {
+    day: 'monday',
+    dayOfWeek: 1,
+    name: 'Monday',
+    muscleGroups: 'Chest, Biceps & Abs',
+    exercises: [
+      { id: 'bench-press',     name: 'Flat Barbell Bench Press',   type: 'TIER1',    sets: 4, reps: '8-10' },
+      { id: 'incline-db',      name: 'Incline Dumbbell Bench',      type: 'STANDARD', sets: 3, reps: '10' },
+      { id: 'landmine-chest',  name: 'Landmine Chest Press',        type: 'STANDARD', sets: 3, reps: '12' },
+      { id: 'barbell-curls',   name: 'Standing Barbell Curls',      type: 'STANDARD', sets: 4, reps: '10' },
+      { id: 'preacher-curls',  name: 'Preacher Curls',              type: 'STANDARD', sets: 3, reps: '12' },
+      { id: 'leg-raises',      name: 'Leg Raises',                  type: 'STANDARD', sets: 3, reps: '15' },
+      { id: 'ab-roller',       name: 'Ab Roller',                   type: 'AMRAP',    sets: 3, reps: 'Failure' },
+    ],
+  },
+  {
+    day: 'tuesday',
+    dayOfWeek: 2,
+    name: 'Tuesday',
+    muscleGroups: 'Legs',
+    exercises: [
+      { id: 'back-squats',     name: 'Barbell Back Squats',         type: 'TIER1',    sets: 4, reps: '8-10' },
+      { id: 'landmine-lunges', name: 'Landmine Reverse Lunges',     type: 'STANDARD', sets: 3, reps: '10/leg' },
+      { id: 'bulgarian-split', name: 'Bulgarian Split Squats',      type: 'STANDARD', sets: 3, reps: '10' },
+      { id: 'hip-thrusts',     name: 'Lying Hip Thrusts',           type: 'STANDARD', sets: 4, reps: '12' },
+    ],
+  },
+  {
+    day: 'thursday',
+    dayOfWeek: 4,
+    name: 'Thursday',
+    muscleGroups: 'Shoulders, Triceps & Abs',
+    exercises: [
+      { id: 'military-press',  name: 'Standing Military Press',     type: 'TIER1',    sets: 4, reps: '8-10' },
+      { id: 'landmine-press',  name: 'Landmine Single-Arm Press',   type: 'STANDARD', sets: 3, reps: '10/arm' },
+      { id: 'lateral-raises',  name: 'Lateral Raises',              type: 'STANDARD', sets: 4, reps: '15' },
+      { id: 'skull-crushers',  name: 'Lying DB Extensions (Skull)', type: 'STANDARD', sets: 3, reps: '12' },
+      { id: 'dips',            name: 'Dips',                        type: 'AMRAP',    sets: 3, reps: 'Failure' },
+      { id: 'oblique-twists',  name: 'Oblique Twists',              type: 'STANDARD', sets: 3, reps: '20' },
+      { id: 'plank',           name: 'Plank',                       type: 'TIMED',    sets: 3, reps: '1 min' },
+    ],
+  },
+  {
+    day: 'friday',
+    dayOfWeek: 5,
+    name: 'Friday',
+    muscleGroups: 'Back & Rear Delts',
+    exercises: [
+      { id: 'deadlifts',       name: 'Deadlifts',                   type: 'TIER1',    sets: 4, reps: '6-8' },
+      { id: 'pull-ups',        name: 'Pull-Ups',                    type: 'AMRAP',    sets: 3, reps: 'AMRAP' },
+      { id: 'landmine-rows',   name: 'Landmine Rows (Meadows)',     type: 'STANDARD', sets: 4, reps: '10' },
+      { id: 'db-rows',         name: 'One Arm Dumbbell Rows',       type: 'STANDARD', sets: 3, reps: '12' },
+      { id: 'rear-delt-flyes', name: 'Rear Delt Dumbbell Flyes',   type: 'STANDARD', sets: 3, reps: '15' },
+    ],
+  },
+];
+
+export function getTodayWorkout(): WorkoutDay | null {
+  const dow = new Date().getDay(); // 0=Sun, 1=Mon...
+  return WORKOUT_PROGRAMME.find(w => w.dayOfWeek === dow) ?? null;
+}
+
+export function getWorkoutByDay(day: string): WorkoutDay | null {
+  return WORKOUT_PROGRAMME.find(w => w.day === day) ?? null;
+}</code></pre>
+  </div>
+  <div class="ac"><div class="ac-label">✓ Acceptance</div><div class="ac-text"><code>getTodayWorkout()</code> returns the correct workout on each day of the week. Returns <code>null</code> on Wed/Sat/Sun. All 4 days have the correct exercise arrays matching the PDF.</div></div>
+</div>
+
+<div class="task">
+  <div class="task-header"><span class="task-name">1.3 — Timing utilities &amp; learning algorithm</span><span class="badge badge-amber">LOGIC</span></div>
+  <div class="task-body">
+    <p>Write <code>src/utils/timing.ts</code>. This is the heart of the adaptive timing system.</p>
+    <pre><code>import { ExerciseType, TimingRecord, UserSettings } from '@/types';
+
+export const DEFAULT_SETTINGS: UserSettings = {
+  tier1SetDuration: 60,
+  tier1BreakDuration: 150,    // 2:30
+  standardSetDuration: 40,
+  standardBreakDuration: 90,  // 1:30
+  timedBreakDuration: 60,     // 1:00
+  targetWorkoutMinutes: 90,
+  warningWorkoutMinutes: 120,
+  minSessionsForAdaptation: 3,
+};
+
+export interface TimingPrediction {
+  setDuration: number | null; // null = AMRAP
+  breakDuration: number;
+}
+
+export function getDefaultTiming(
+  type: ExerciseType,
+  settings: UserSettings
+): TimingPrediction {
+  switch (type) {
+    case 'TIER1':
+      return { setDuration: settings.tier1SetDuration, breakDuration: settings.tier1BreakDuration };
+    case 'TIMED':
+      return { setDuration: 60, breakDuration: settings.timedBreakDuration };
+    case 'AMRAP':
+      return { setDuration: null, breakDuration: settings.standardBreakDuration };
+    default:
+      return { setDuration: settings.standardSetDuration, breakDuration: settings.standardBreakDuration };
+  }
+}
+
+// Rolling average of last N records for this exercise
+const ROLLING_WINDOW = 15;
+
+export function getAdaptedTiming(
+  exerciseId: string,
+  exerciseType: ExerciseType,
+  allRecords: TimingRecord[],
+  settings: UserSettings
+): TimingPrediction {
+  const defaults = getDefaultTiming(exerciseType, settings);
+
+  // Count distinct sessions for this exercise
+  const relevant = allRecords.filter(r => r.exerciseId === exerciseId);
+  const distinctSessions = new Set(relevant.map(r => r.sessionId)).size;
+
+  if (distinctSessions < settings.minSessionsForAdaptation) {
+    return defaults; // not enough history yet
+  }
+
+  const window = relevant.slice(-ROLLING_WINDOW);
+
+  // Adapt setDuration only for types that have one
+  const validSetRecords = window.filter(r => r.setDuration !== null);
+  const adaptedSet = validSetRecords.length > 0
+    ? Math.round(validSetRecords.reduce((a, r) => a + r.setDuration!, 0) / validSetRecords.length)
+    : defaults.setDuration;
+
+  const adaptedBreak = Math.round(
+    window.reduce((a, r) => a + r.breakDuration, 0) / window.length
+  );
+
+  return {
+    setDuration: exerciseType === 'AMRAP' ? null : adaptedSet,
+    breakDuration: Math.max(30, adaptedBreak), // floor: 30s break minimum
+  };
+}
+
+export function estimateTotalDuration(
+  workout: { exercises: Array<{ type: ExerciseType; sets: number; id: string }> },
+  allRecords: TimingRecord[],
+  settings: UserSettings
+): number {
+  let total = 0;
+  for (const ex of workout.exercises) {
+    if (ex.type === 'CARDIO') continue;
+    const timing = getAdaptedTiming(ex.id, ex.type, allRecords, settings);
+    const setTime = timing.setDuration ?? 45; // estimate 45s for AMRAP
+    total += ex.sets * (setTime + timing.breakDuration);
+  }
+  return Math.round(total / 60); // return minutes
+}
+
+export function formatTime(seconds: number): string {
+  const absSeconds = Math.abs(seconds);
+  const m = Math.floor(absSeconds / 60);
+  const s = absSeconds % 60;
+  const sign = seconds < 0 ? '-' : '';
+  return `${sign}${m}:${s.toString().padStart(2, '0')}`;
+}
+
+export function formatElapsed(seconds: number): string {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  if (h > 0) return `${h}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}</code></pre>
+  </div>
+  <div class="ac"><div class="ac-label">✓ Acceptance</div><div class="ac-text">Unit test: after 3 sessions where actual break was always 110s, <code>getAdaptedTiming</code> returns <code>breakDuration</code> close to 110. With 2 sessions it still returns defaults. AMRAP always returns <code>setDuration: null</code>.</div></div>
+</div>
+
+<div class="task">
+  <div class="task-header"><span class="task-name">1.4 — History store (Zustand + AsyncStorage)</span><span class="badge badge-blue">STORE</span></div>
+  <div class="task-body">
+    <p>Write <code>src/store/historyStore.ts</code>. Persisted to AsyncStorage.</p>
+    <pre><code>import { create } from 'zustand';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { TimingRecord, WorkoutSession, UserSettings } from '@/types';
+import { DEFAULT_SETTINGS } from '@/utils/timing';
+
+const KEYS = {
+  timing:   'timing_history',
+  sessions: 'session_history',
+  settings: 'user_settings',
+};
+
+interface HistoryStore {
+  timingRecords: TimingRecord[];
+  sessions: WorkoutSession[];
+  settings: UserSettings;
+  hydrated: boolean;
+
+  hydrate: () => Promise<void>;
+  addTimingRecord: (record: TimingRecord) => Promise<void>;
+  saveSession: (session: WorkoutSession) => Promise<void>;
+  updateSettings: (patch: Partial&lt;UserSettings&gt;) => Promise<void>;
+  resetLearning: () => Promise<void>;
+}
+
+export const useHistoryStore = create&lt;HistoryStore&gt;((set, get) => ({
+  timingRecords: [],
+  sessions: [],
+  settings: DEFAULT_SETTINGS,
+  hydrated: false,
+
+  hydrate: async () => {
+    try {
+      const [timingRaw, sessionsRaw, settingsRaw] = await Promise.all([
+        AsyncStorage.getItem(KEYS.timing),
+        AsyncStorage.getItem(KEYS.sessions),
+        AsyncStorage.getItem(KEYS.settings),
+      ]);
+      set({
+        timingRecords: timingRaw ? JSON.parse(timingRaw) : [],
+        sessions:      sessionsRaw ? JSON.parse(sessionsRaw) : [],
+        settings:      settingsRaw ? { ...DEFAULT_SETTINGS, ...JSON.parse(settingsRaw) } : DEFAULT_SETTINGS,
+        hydrated: true,
+      });
+    } catch (e) {
+      set({ hydrated: true });
+    }
+  },
+
+  addTimingRecord: async (record) => {
+    const next = [...get().timingRecords, record];
+    set({ timingRecords: next });
+    await AsyncStorage.setItem(KEYS.timing, JSON.stringify(next));
+  },
+
+  saveSession: async (session) => {
+    const next = [session, ...get().sessions].slice(0, 100); // keep last 100
+    set({ sessions: next });
+    await AsyncStorage.setItem(KEYS.sessions, JSON.stringify(next));
+  },
+
+  updateSettings: async (patch) => {
+    const next = { ...get().settings, ...patch };
+    set({ settings: next });
+    await AsyncStorage.setItem(KEYS.settings, JSON.stringify(next));
+  },
+
+  resetLearning: async () => {
+    set({ timingRecords: [] });
+    await AsyncStorage.removeItem(KEYS.timing);
+  },
+}));</code></pre>
+    <p>Call <code>useHistoryStore.getState().hydrate()</code> in the root <code>_layout.tsx</code> inside a <code>useEffect</code> on mount.</p>
+  </div>
+  <div class="ac"><div class="ac-label">✓ Acceptance</div><div class="ac-text">Kill and relaunch the app — all stored timing records and sessions persist. <code>hydrated</code> flag becomes true before Home screen renders. Settings survive app restart.</div></div>
+</div>
+
+<div class="task">
+  <div class="task-header"><span class="task-name">1.5 — Active workout store (Zustand, in-memory)</span><span class="badge badge-blue">STORE</span></div>
+  <div class="task-body">
+    <p>Write <code>src/store/workoutStore.ts</code>. NOT persisted — in-memory only. Reset when workout ends.</p>
+    <pre><code>import { create } from 'zustand';
+import { WorkoutDay, ActiveSet, TimerPhase, SetRecord } from '@/types';
+
+interface WorkoutStore {
+  // Session metadata
+  activeWorkout: WorkoutDay | null;
+  sessionId: string | null;
+  sessionStartedAt: number | null;
+
+  // Current position
+  currentExerciseIndex: number;
+  currentSetNumber: number; // 1-based
+  currentPhase: TimerPhase;
+  phaseStartedAt: number | null;   // Date.now() when phase began
+  targetDuration: number | null;    // null for AMRAP
+
+  // Set records accumulating
+  setRecords: SetRecord[];
+
+  // 2hr warning
+  warningDismissed: boolean;
+
+  // Actions
+  startWorkout: (workout: WorkoutDay, sessionId: string) => void;
+  startSet: (targetDuration: number | null) => void;
+  completeSet: (actualDuration: number) => void;
+  startBreak: (targetBreakDuration: number) => void;
+  completeBreak: (actualBreakDuration: number) => void;
+  skipBreak: () => void;
+  abandonWorkout: () => void;
+  dismissWarning: () => void;
+  addSetRecord: (record: SetRecord) => void;
+}
+
+export const useWorkoutStore = create&lt;WorkoutStore&gt;((set, get) => ({
+  activeWorkout: null,
+  sessionId: null,
+  sessionStartedAt: null,
+  currentExerciseIndex: 0,
+  currentSetNumber: 1,
+  currentPhase: 'IDLE',
+  phaseStartedAt: null,
+  targetDuration: null,
+  setRecords: [],
+  warningDismissed: false,
+
+  startWorkout: (workout, sessionId) => set({
+    activeWorkout: workout,
+    sessionId,
+    sessionStartedAt: Date.now(),
+    currentExerciseIndex: 0,
+    currentSetNumber: 1,
+    currentPhase: 'IDLE',
+    phaseStartedAt: null,
+    targetDuration: null,
+    setRecords: [],
+    warningDismissed: false,
+  }),
+
+  startSet: (targetDuration) => set({
+    currentPhase: targetDuration === null ? 'AMRAP' : 'SET',
+    phaseStartedAt: Date.now(),
+    targetDuration,
+  }),
+
+  completeSet: (actualDuration) => {
+    // Called when user taps DONE
+    // Transition to BREAK phase is handled by startBreak
+  },
+
+  startBreak: (targetBreakDuration) => set({
+    currentPhase: 'BREAK',
+    phaseStartedAt: Date.now(),
+    targetDuration: targetBreakDuration,
+  }),
+
+  completeBreak: (actualBreakDuration) => {
+    const s = get();
+    const workout = s.activeWorkout!;
+    const currentExercise = workout.exercises[s.currentExerciseIndex];
+    const isLastSet = s.currentSetNumber >= currentExercise.sets;
+    const isLastExercise = s.currentExerciseIndex >= workout.exercises.length - 1;
+
+    if (isLastSet && isLastExercise) {
+      set({ currentPhase: 'COMPLETE' });
+    } else if (isLastSet) {
+      set({
+        currentExerciseIndex: s.currentExerciseIndex + 1,
+        currentSetNumber: 1,
+        currentPhase: 'IDLE',
+        phaseStartedAt: null,
+      });
+    } else {
+      set({
+        currentSetNumber: s.currentSetNumber + 1,
+        currentPhase: 'IDLE',
+        phaseStartedAt: null,
+      });
+    }
+  },
+
+  skipBreak: () => {
+    get().completeBreak(0);
+  },
+
+  abandonWorkout: () => set({
+    activeWorkout: null,
+    sessionId: null,
+    sessionStartedAt: null,
+    currentExerciseIndex: 0,
+    currentSetNumber: 1,
+    currentPhase: 'IDLE',
+    phaseStartedAt: null,
+    targetDuration: null,
+    setRecords: [],
+    warningDismissed: false,
+  }),
+
+  dismissWarning: () => set({ warningDismissed: true }),
+
+  addSetRecord: (record) => set(s => ({ setRecords: [...s.setRecords, record] })),
+}));</code></pre>
+  </div>
+  <div class="ac"><div class="ac-label">✓ Acceptance</div><div class="ac-text">State transitions flow correctly: IDLE → SET → BREAK → SET → ... → COMPLETE. After last set of last exercise, phase becomes COMPLETE. abandonWorkout resets all state.</div></div>
+</div>
+
+</div><!-- /task-grid -->
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<section id="phase2">
+<h2><span class="phase-num">2</span> Timer Engine — Hook &amp; Alert System</h2>
+
+<div class="task-grid">
+
+<div class="task">
+  <div class="task-header"><span class="task-name">2.1 — Core timer hook</span><span class="badge badge-green">CRITICAL</span></div>
+  <div class="task-body">
+    <p>Create <code>src/hooks/useTimer.ts</code>. This hook drives the entire timer loop with <code>setInterval</code>. It reads <code>phaseStartedAt</code> and <code>targetDuration</code> from the store and emits the current elapsed/remaining values + ring progress.</p>
+    <pre><code>import { useEffect, useRef, useCallback } from 'react';
+import { useSharedValue, withTiming, Easing } from 'react-native-reanimated';
+
+interface UseTimerReturn {
+  elapsed: number;           // seconds elapsed in current phase
+  remaining: number;         // seconds remaining (negative when over)
+  progress: Animated.SharedValue&lt;number&gt;; // 0→1 for ring fill
+  isOvertime: boolean;
+}
+
+export function useTimer(
+  phaseStartedAt: number | null,
+  targetDuration: number | null,
+  onTargetReached: () => void,
+): UseTimerReturn {
+  const progress = useSharedValue(0);
+  const alertFiredRef = useRef(false);
+  const intervalRef = useRef&lt;ReturnType&lt;typeof setInterval&gt; | null&gt;(null);
+
+  // Implementation: 
+  // 1. Clear previous interval on phase change
+  // 2. Every 100ms, compute elapsed = (Date.now() - phaseStartedAt) / 1000
+  // 3. If targetDuration is set, progress = Math.min(elapsed / targetDuration, 1)
+  //    If AMRAP: progress oscillates (use a slow spinning animation instead)
+  // 4. When elapsed >= targetDuration and !alertFiredRef.current:
+  //    alertFiredRef.current = true; onTargetReached();
+  // 5. On cleanup, clear interval and reset alertFiredRef
+
+  // Return computed values (use useState for elapsed/remaining)
+  // ...
+  
+  return { elapsed: 0, remaining: 0, progress, isOvertime: false };
+}
+
+// NOTE TO CLAUDE CODE: Implement the above hook fully with:
+// - useEffect watching phaseStartedAt (reset on each phase start)
+// - useCallback-wrapped onTargetReached to avoid stale closures
+// - Separate state for elapsed (number) to trigger re-render every second
+// - progress as a Reanimated SharedValue that updates smoothly
+// - alertFiredRef reset to false every time phaseStartedAt changes</code></pre>
+    <div class="warn"><div class="warn-label">⚠ Implementation Note</div>The timer should update <strong>every 100ms</strong> for smooth progress arc but only trigger a React state update every <strong>1 second</strong> (to avoid 10 re-renders/second). Use a ref for the high-frequency tick and setState only when the integer second changes.</div>
+  </div>
+  <div class="ac"><div class="ac-label">✓ Acceptance</div><div class="ac-text">SET phase: elapsed counts up, progress fills 0→1 over targetDuration. At targetDuration: onTargetReached fires exactly once. Timer keeps running past target. BREAK phase: remaining counts down, goes negative when overtime. AMRAP: elapsed counts up, no target reached event.</div></div>
+</div>
+
+<div class="task">
+  <div class="task-header"><span class="task-name">2.2 — Alert service</span><span class="badge badge-amber">ALERTS</span></div>
+  <div class="task-body">
+    <p>Create <code>src/utils/alertService.ts</code>. Handles sound + haptics with the 2-second auto-stop behaviour.</p>
+    <pre><code>import { Audio } from 'expo-av';
+import * as Haptics from 'expo-haptics';
+
+let soundObject: Audio.Sound | null = null;
+let alertTimeout: ReturnType&lt;typeof setTimeout&gt; | null = null;
+
+async function loadSound() {
+  if (soundObject) return;
+  const { sound } = await Audio.Sound.createAsync(
+    require('../../assets/sounds/beep.mp3')
+  );
+  soundObject = sound;
+}
+
+// Fire alert: sound + haptics, then stop after 2 seconds
+export async function fireAlert(beeps: number = 2) {
+  // Clear any previous alert
+  if (alertTimeout) {
+    clearTimeout(alertTimeout);
+    alertTimeout = null;
+  }
+
+  try {
+    await Audio.setAudioModeAsync({
+      playsInSilentModeIOS: true,
+      staysActiveInBackground: true,
+    });
+
+    await loadSound();
+
+    // Play beeps
+    for (let i = 0; i &lt; beeps; i++) {
+      await soundObject!.setPositionAsync(0);
+      await soundObject!.playAsync();
+      // Haptic with each beep
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      await new Promise(res => setTimeout(res, 400));
+    }
+
+    // Auto-stop after 2 seconds total
+    alertTimeout = setTimeout(async () => {
+      await soundObject?.stopAsync();
+    }, 2000);
+  } catch (e) {
+    console.warn('Alert service error:', e);
+  }
+}
+
+export async function stopAlert() {
+  if (alertTimeout) {
+    clearTimeout(alertTimeout);
+    alertTimeout = null;
+  }
+  await soundObject?.stopAsync();
+}
+
+// Different alert intensities
+export const Alerts = {
+  setComplete: () => fireAlert(2),  // 2 beeps when set target reached
+  breakComplete: () => fireAlert(3), // 3 beeps when break ends
+  workoutWarning: () => fireAlert(5), // 5 beeps at 2hr warning
+};</code></pre>
+    <p>Call <code>stopAlert()</code> whenever the user taps DONE or START NEXT SET — this silences the alert early if they tap before the 2 seconds are up.</p>
+  </div>
+  <div class="ac"><div class="ac-label">✓ Acceptance</div><div class="ac-text">Sound plays on a physical Android device. If user taps DONE within 1 second of alert firing, sound stops immediately. Sound does NOT restart on the next set without a new alert trigger. Works when phone is on silent (Android: uses notification channel bypass via expo-av mode).</div></div>
+</div>
+
+<div class="task">
+  <div class="task-header"><span class="task-name">2.3 — Screen always-on</span><span class="badge badge-green">NATIVE</span></div>
+  <div class="task-body">
+    <p>Create <code>src/hooks/useKeepAwake.ts</code> to activate screen-on during workouts:</p>
+    <pre><code>import { useEffect } from 'react';
+import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
+
+export function useKeepAwake(active: boolean) {
+  useEffect(() => {
+    if (active) {
+      activateKeepAwakeAsync();
+    } else {
+      deactivateKeepAwake();
+    }
+    return () => {
+      deactivateKeepAwake();
+    };
+  }, [active]);
+}</code></pre>
+    <p>Use this hook in the Workout screen with <code>active={true}</code>. The Home and other screens pass <code>active={false}</code> (or just don't use the hook).</p>
+  </div>
+  <div class="ac"><div class="ac-label">✓ Acceptance</div><div class="ac-text">Physical device screen does not dim or lock while the Workout screen is active. Screen returns to normal timeout behaviour after leaving the Workout screen.</div></div>
+</div>
+
+<div class="task">
+  <div class="task-header"><span class="task-name">2.4 — 2-hour warning detector</span><span class="badge badge-red">WARNING</span></div>
+  <div class="task-body">
+    <p>Create <code>src/hooks/useWorkoutDuration.ts</code>:</p>
+    <pre><code>import { useState, useEffect, useRef } from 'react';
+import { useWorkoutStore } from '@/store/workoutStore';
+import { useHistoryStore } from '@/store/historyStore';
+import { Alerts } from '@/utils/alertService';
+
+export function useWorkoutDuration() {
+  const sessionStartedAt = useWorkoutStore(s => s.sessionStartedAt);
+  const warningDismissed = useWorkoutStore(s => s.warningDismissed);
+  const dismissWarning = useWorkoutStore(s => s.dismissWarning);
+  const settings = useHistoryStore(s => s.settings);
+
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [showWarning, setShowWarning] = useState(false);
+  const warningFiredRef = useRef(false);
+
+  useEffect(() => {
+    if (!sessionStartedAt) { setElapsedSeconds(0); return; }
+
+    const interval = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - sessionStartedAt) / 1000);
+      setElapsedSeconds(elapsed);
+
+      const elapsedMinutes = elapsed / 60;
+      if (
+        elapsedMinutes >= settings.warningWorkoutMinutes &&
+        !warningFiredRef.current &&
+        !warningDismissed
+      ) {
+        warningFiredRef.current = true;
+        setShowWarning(true);
+        Alerts.workoutWarning();
+      }
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [sessionStartedAt, settings.warningWorkoutMinutes, warningDismissed]);
+
+  const dismiss = () => {
+    setShowWarning(false);
+    dismissWarning();
+  };
+
+  const targetSeconds = settings.targetWorkoutMinutes * 60;
+  const warningSeconds = settings.warningWorkoutMinutes * 60;
+  const progressToTarget = Math.min(elapsedSeconds / targetSeconds, 1);
+  const isNearTarget = elapsedSeconds >= targetSeconds * 0.9; // 90% of target
+  const isPastTarget = elapsedSeconds >= targetSeconds;
+
+  return { elapsedSeconds, showWarning, dismiss, progressToTarget, isNearTarget, isPastTarget };
+}</code></pre>
+  </div>
+  <div class="ac"><div class="ac-label">✓ Acceptance</div><div class="ac-text">At 90 min: elapsed clock turns amber. At 120 min: <code>showWarning</code> becomes true. Warning fires only once even if component re-renders. Dismissing sets <code>showWarning=false</code> and does not re-trigger.</div></div>
+</div>
+
+</div><!-- /task-grid -->
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<section id="phase3">
+<h2><span class="phase-num">3</span> UI Components</h2>
+
+<div class="task-grid">
+
+<div class="task">
+  <div class="task-header"><span class="task-name">3.1 — Design tokens</span><span class="badge badge-green">TOKENS</span></div>
+  <div class="task-body">
+    <p>Create <code>src/utils/theme.ts</code> with all design tokens. Every component must import colours from here — no hardcoded hex values in component files.</p>
+    <pre><code>export const Colors = {
+  bg:          '#0A0A0A',
+  surface1:    '#111111',
+  surface2:    '#1C1C1C',
+  surface3:    '#262626',
+  green:       '#22D46E',
+  blue:        '#3B82F6',
+  amber:       '#F59E0B',
+  red:         '#EF4444',
+  textPrimary: '#F0F0F0',
+  textSecondary: '#888888',
+  border:      '#2A2A2A',
+} as const;
+
+export const Spacing = {
+  xs: 4, sm: 8, md: 16, lg: 24, xl: 32, xxl: 48,
+} as const;
+
+export const Radius = {
+  sm: 8, md: 12, lg: 16, xl: 20, full: 9999,
+} as const;
+
+export const FontSize = {
+  xs: 11, sm: 13, md: 15, lg: 17, xl: 22, xxl: 32, xxxl: 48,
+} as const;
+
+export const FontWeight = {
+  regular: '400' as const,
+  medium:  '500' as const,
+  semibold:'600' as const,
+  bold:    '700' as const,
+  black:   '900' as const,
+};</code></pre>
+  </div>
+  <div class="ac"><div class="ac-label">✓ Acceptance</div><div class="ac-text">All components compile without any hardcoded hex values in StyleSheet definitions.</div></div>
+</div>
+
+<div class="task">
+  <div class="task-header"><span class="task-name">3.2 — CircularTimer component</span><span class="badge badge-amber">CRITICAL UI</span></div>
+  <div class="task-body">
+    <p>Create <code>src/components/CircularTimer.tsx</code>. This is the centrepiece of the workout screen. SVG ring with Reanimated animated progress.</p>
+    <pre><code>import React from 'react';
+import { View, Text, StyleSheet } from 'react-native';
+import Svg, { Circle } from 'react-native-svg';
+import Animated, { useAnimatedProps } from 'react-native-reanimated';
+import { Colors, FontSize, FontWeight } from '@/utils/theme';
+
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+
+const SIZE = 280;
+const STROKE_WIDTH = 12;
+const RADIUS = (SIZE - STROKE_WIDTH) / 2;
+const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
+
+interface CircularTimerProps {
+  progress: Animated.SharedValue&lt;number&gt;;  // 0 to 1
+  timeDisplay: string;                      // e.g. "1:23" or "+0:12"
+  subLabel: string;                         // e.g. "elapsed" or "remaining" or "OVERTIME"
+  ringColor: string;                        // green, blue, or red
+  phase: 'SET' | 'BREAK' | 'AMRAP' | 'TIMED';
+  isOvertime: boolean;
+}
+
+export function CircularTimer({
+  progress, timeDisplay, subLabel, ringColor, phase, isOvertime,
+}: CircularTimerProps) {
+  const animatedProps = useAnimatedProps(() => {
+    const strokeDashoffset = CIRCUMFERENCE * (1 - Math.min(progress.value, 1));
+    return { strokeDashoffset };
+  });
+
+  return (
+    &lt;View style={styles.container}&gt;
+      &lt;Svg width={SIZE} height={SIZE}&gt;
+        {/* Background track */}
+        &lt;Circle
+          cx={SIZE / 2} cy={SIZE / 2} r={RADIUS}
+          stroke={Colors.surface2}
+          strokeWidth={STROKE_WIDTH}
+          fill="none"
+        /&gt;
+        {/* Progress arc */}
+        &lt;AnimatedCircle
+          cx={SIZE / 2} cy={SIZE / 2} r={RADIUS}
+          stroke={isOvertime ? Colors.red : ringColor}
+          strokeWidth={STROKE_WIDTH}
+          fill="none"
+          strokeDasharray={CIRCUMFERENCE}
+          animatedProps={animatedProps}
+          strokeLinecap="round"
+          // Rotate so progress starts from top (12 o'clock)
+          transform={`rotate(-90 ${SIZE/2} ${SIZE/2})`}
+        /&gt;
+      &lt;/Svg&gt;
+      {/* Centered text overlay */}
+      &lt;View style={styles.textOverlay}&gt;
+        &lt;Text style={[styles.timeText, isOvertime && { color: Colors.red }]}&gt;
+          {timeDisplay}
+        &lt;/Text&gt;
+        &lt;Text style={styles.subLabel}&gt;{subLabel}&lt;/Text&gt;
+      &lt;/View&gt;
+    &lt;/View&gt;
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { alignItems: 'center', justifyContent: 'center', position: 'relative' },
+  textOverlay: {
+    position: 'absolute', alignItems: 'center', justifyContent: 'center',
+  },
+  timeText: {
+    fontSize: FontSize.xxxl, fontWeight: FontWeight.black,
+    color: Colors.textPrimary, letterSpacing: -2,
+    fontVariant: ['tabular-nums'],
+  },
+  subLabel: {
+    fontSize: FontSize.sm, fontWeight: FontWeight.medium,
+    color: Colors.textSecondary, marginTop: 4, textTransform: 'uppercase',
+    letterSpacing: 1.5,
+  },
+});</code></pre>
+    <div class="info"><div class="info-label">ℹ For AMRAP</div>When phase is AMRAP, show a slow-spinning partial arc instead of fill. Use a Reanimated withRepeat animation on a rotation value. The ring is always 25% full and rotates. Centre text shows "GO" then elapsed time once started.</div>
+  </div>
+  <div class="ac"><div class="ac-label">✓ Acceptance</div><div class="ac-text">Ring animates smoothly from empty to full over targetDuration seconds. Rotation starts from 12 o'clock (top). In overtime, ring colour transitions to red. AMRAP shows spinning arc. No jank or dropped frames.</div></div>
+</div>
+
+<div class="task">
+  <div class="task-header"><span class="task-name">3.3 — SetDotsIndicator component</span><span class="badge badge-green">UI</span></div>
+  <div class="task-body">
+    <p>Create <code>src/components/SetDotsIndicator.tsx</code>. Shows progress through the sets as dots.</p>
+    <pre><code>// Renders: ● ● ○ ○  (filled = done, empty = remaining, current = pulsing)
+// Props: totalSets: number, currentSet: number (1-based), phase: TimerPhase
+
+// Filled dot: 14px circle, color = green
+// Current dot: 14px circle, green, slight scale pulse animation
+// Empty dot: 14px circle, stroke only, color = surface3</code></pre>
+  </div>
+  <div class="ac"><div class="ac-label">✓ Acceptance</div><div class="ac-text">Set 1 of 4: one filled dot + three empty. After completing set 2 break: two filled, one pulsing, one empty. All 4 filled on last set.</div></div>
+</div>
+
+<div class="task">
+  <div class="task-header"><span class="task-name">3.4 — PrimaryButton &amp; SecondaryButton</span><span class="badge badge-green">UI</span></div>
+  <div class="task-body">
+    <p>Create <code>src/components/Buttons.tsx</code>. Large thumb-friendly buttons for the workout screen bottom zone.</p>
+    <pre><code>// PrimaryButton: full-width, height 64, borderRadius 16
+// Color prop: 'green' | 'blue' — controls background
+// Has a subtle scale-down on press (Pressable with Animated scale)
+
+// SecondaryButton: full-width, height 48, borderRadius 12
+// Outline style — transparent bg, colored border + text
+// For SKIP BREAK action
+
+// Both: haptic feedback on press (Haptics.selectionAsync)</code></pre>
+  </div>
+  <div class="ac"><div class="ac-label">✓ Acceptance</div><div class="ac-text">Minimum 44px tap target on all buttons. Scale animation on press. Haptic on press. Text stays centred. Buttons are full-width minus 24px horizontal padding.</div></div>
+</div>
+
+<div class="task">
+  <div class="task-header"><span class="task-name">3.5 — WorkoutProgressBar component</span><span class="badge badge-green">UI</span></div>
+  <div class="task-body">
+    <p>Create <code>src/components/WorkoutProgressBar.tsx</code>. Thin (4px) bar that shows overall workout elapsed vs target, embedded in the workout header.</p>
+    <pre><code>// Props: elapsedSeconds, targetSeconds, warningSeconds
+// Bar fills left-to-right with animated width
+// Colour: green → amber at 90% of target → red at warning time
+// Width: compact, sits next to the elapsed clock in header
+
+// Layout: [✕]  [0:23:45]  [▓▓▓▓▓▓▒░░░░] (90m)</code></pre>
+  </div>
+  <div class="ac"><div class="ac-label">✓ Acceptance</div><div class="ac-text">At 40 min of 90 min target: bar is ~44% full, green. At 85 min: bar is ~94% full, amber. Does not overflow container.</div></div>
+</div>
+
+<div class="task">
+  <div class="task-header"><span class="task-name">3.6 — TwoHourWarningOverlay</span><span class="badge badge-red">WARNING UI</span></div>
+  <div class="task-body">
+    <p>Create <code>src/components/TwoHourWarningOverlay.tsx</code>. Full-screen modal overlay when workout exceeds warning time.</p>
+    <pre><code>// Full-screen semi-transparent overlay (rgba 0,0,0, 0.85)
+// Centred card with:
+//   - ⚠️ icon (large, red)
+//   - Title: "2 Hours In"  
+//   - Body: "You've been training for over 2 hours. Consider wrapping up."
+//   - Single large button: "GOT IT, KEEP GOING" (green)
+// Animated: slides up from bottom with spring animation on mount</code></pre>
+  </div>
+  <div class="ac"><div class="ac-label">✓ Acceptance</div><div class="ac-text">Overlay blocks all interaction behind it. Dismisses with GOT IT button. Does not re-appear after dismissal. Spring entrance animation plays.</div></div>
+</div>
+
+</div><!-- /task-grid -->
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<section id="phase4">
+<h2><span class="phase-num">4</span> Screens</h2>
+
+<div class="task-grid">
+
+<div class="task">
+  <div class="task-header"><span class="task-name">4.1 — Home Screen</span><span class="badge badge-green">SCREEN</span></div>
+  <div class="task-body">
+    <p>File: <code>app/index.tsx</code></p>
+    <p><strong>Has workout day:</strong></p>
+    <ul>
+      <li>Top bar: app name left, settings icon + history icon right (44×44 tap targets)</li>
+      <li>Day name (large, green, uppercase) + muscle groups (secondary text)</li>
+      <li>Stats card: exercise count + estimated time (calculated via <code>estimateTotalDuration</code>)</li>
+      <li>T1 exercise highlighted with amber badge</li>
+      <li>Scrollable exercise list (all exercises for the day)</li>
+      <li>Sticky bottom: large START WORKOUT button (green, full width)</li>
+    </ul>
+    <p><strong>Rest day:</strong></p>
+    <ul>
+      <li>Display "REST DAY" in large green text</li>
+      <li>Sub-text: "No 4AM alarm. Sleep in. Muscles grow during rest!"</li>
+      <li>Show next workout day: "Next: Monday — Chest, Biceps &amp; Abs"</li>
+    </ul>
+    <p><strong>On START WORKOUT:</strong></p>
+    <pre><code>const sessionId = uuid.v4() as string;
+useWorkoutStore.getState().startWorkout(todayWorkout, sessionId);
+// Get timing for first exercise
+const firstEx = todayWorkout.exercises[0];
+const timing = getAdaptedTiming(firstEx.id, firstEx.type, timingRecords, settings);
+useWorkoutStore.getState().startSet(timing.setDuration);
+router.push('/workout');</code></pre>
+  </div>
+  <div class="ac"><div class="ac-label">✓ Acceptance</div><div class="ac-text">Home shows correct workout for today's day of week. Estimated time updates based on stored history. Rest day shows on Wed/Sat/Sun. START WORKOUT navigates to workout screen. Exercise list is scrollable. T1 exercises show amber badge.</div></div>
+</div>
+
+<div class="task">
+  <div class="task-header"><span class="task-name">4.2 — Workout Screen (main)</span><span class="badge badge-amber">CRITICAL SCREEN</span></div>
+  <div class="task-body">
+    <p>File: <code>app/workout/index.tsx</code>. This is the most complex screen — the entire timer experience lives here.</p>
+    
+    <h4>Screen structure (top to bottom)</h4>
+    <ul>
+      <li><strong>Header (fixed):</strong> ✕ abandon button | elapsed clock | workout progress bar</li>
+      <li><strong>Exercise info:</strong> Exercise name (large), T1 badge if applicable, reps target, "SET X OF Y"</li>
+      <li><strong>Circular timer (centred):</strong> Fills remaining vertical space between info and buttons</li>
+      <li><strong>Set dots:</strong> Below timer, centred</li>
+      <li><strong>Target label:</strong> "target: 1:00" (small, secondary text)</li>
+      <li><strong>Buttons (fixed bottom):</strong> DONE button (SET/AMRAP) or START NEXT SET + SKIP BREAK (BREAK)</li>
+    </ul>
+
+    <h4>State-driven rendering</h4>
+    <pre><code>// Use useWorkoutStore for phase, exerciseIndex, setNumber
+// Use useTimer hook for elapsed/remaining/progress
+// Use useKeepAwake(true) — always on during workout
+// Use useWorkoutDuration for total elapsed + 2hr warning
+
+const phase = useWorkoutStore(s => s.currentPhase);
+const exerciseIndex = useWorkoutStore(s => s.currentExerciseIndex);
+
+// Derive current exercise
+const currentExercise = activeWorkout.exercises[exerciseIndex];
+
+// Ring colour based on phase
+const ringColor = phase === 'BREAK' ? Colors.blue : Colors.green;</code></pre>
+
+    <h4>DONE button handler (SET / AMRAP phase)</h4>
+    <pre><code>const handleDone = () => {
+  stopAlert(); // cancel any ongoing alert sound
+  const actualSetDuration = Math.floor((Date.now() - phaseStartedAt!) / 1000);
+  
+  // Get break timing
+  const timing = getAdaptedTiming(currentExercise.id, currentExercise.type, timingRecords, settings);
+  
+  // Record set data
+  addSetRecord({
+    exerciseId: currentExercise.id,
+    exerciseName: currentExercise.name,
+    setNumber: currentSetNumber,
+    predictedSetDuration: targetDuration,
+    actualSetDuration,
+    predictedBreakDuration: timing.breakDuration,
+    actualBreakDuration: 0, // filled in after break
+    completedAt: new Date().toISOString(),
+  });
+
+  // Save timing record
+  addTimingRecord({
+    id: uuid.v4() as string,
+    exerciseId: currentExercise.id,
+    setNumber: currentSetNumber,
+    setDuration: currentExercise.type === 'AMRAP' ? null : actualSetDuration,
+    breakDuration: 0, // will update after break
+    date: new Date().toISOString(),
+    sessionId: sessionId!,
+  });
+
+  // Start break
+  startBreak(timing.breakDuration);
+};</code></pre>
+
+    <h4>START NEXT SET handler (BREAK phase)</h4>
+    <pre><code>const handleStartNextSet = () => {
+  stopAlert();
+  const actualBreakDuration = Math.floor((Date.now() - phaseStartedAt!) / 1000);
+  
+  // Update the last timing record's breakDuration
+  // (find by sessionId + exerciseId + setNumber and update)
+  updateLastTimingRecord(currentExercise.id, currentSetNumber, actualBreakDuration);
+
+  completeBreak(actualBreakDuration);
+
+  // If not COMPLETE, start next set
+  if (currentPhase !== 'COMPLETE') {
+    const nextExercise = /* derive next exercise */;
+    const timing = getAdaptedTiming(nextExercise.id, nextExercise.type, timingRecords, settings);
+    startSet(timing.setDuration);
+  } else {
+    router.replace('/complete');
+  }
+};</code></pre>
+
+    <h4>Abandon workout</h4>
+    <p>Show confirmation Alert dialog before calling <code>abandonWorkout()</code> and <code>router.replace('/')</code>.</p>
+
+    <h4>COMPLETE transition</h4>
+    <p>Watch <code>currentPhase === 'COMPLETE'</code> in a <code>useEffect</code>. When it becomes COMPLETE, save session and navigate to complete screen.</p>
+  </div>
+  <div class="ac"><div class="ac-label">✓ Acceptance</div><div class="ac-text">Full walkthrough: start workout → tap DONE on each set → tap START NEXT SET after each break → all sets of all exercises complete → navigate to /complete automatically. Screen never sleeps. Timer continues after alert fires. Tapping DONE before alert stops the alert sound.</div></div>
+</div>
+
+<div class="task">
+  <div class="task-header"><span class="task-name">4.3 — Workout Complete Screen</span><span class="badge badge-green">SCREEN</span></div>
+  <div class="task-body">
+    <p>File: <code>app/complete.tsx</code></p>
+    <ul>
+      <li>Large ✓ checkmark (animated, green)</li>
+      <li>Title: "Workout Complete!"</li>
+      <li>Total time: "1h 04m" (large, prominent)</li>
+      <li>Exercises completed count</li>
+      <li>Session summary list: each exercise, number of sets completed</li>
+      <li>Large green "DONE" button → navigates to Home</li>
+    </ul>
+    <p>On mount, save the session to history:</p>
+    <pre><code>useEffect(() => {
+  const session: WorkoutSession = {
+    id: sessionId,
+    day: activeWorkout.day,
+    date: new Date().toISOString(),
+    totalDuration: elapsedSeconds,
+    exercisesCompleted: activeWorkout.exercises.length,
+    setRecords,
+  };
+  saveSession(session);
+  abandonWorkout(); // reset active store
+}, []);</code></pre>
+  </div>
+  <div class="ac"><div class="ac-label">✓ Acceptance</div><div class="ac-text">Session appears in history after completion. Total time matches the workout elapsed time. Navigating home shows Home screen correctly. Check animation plays on mount.</div></div>
+</div>
+
+<div class="task">
+  <div class="task-header"><span class="task-name">4.4 — History Screen</span><span class="badge badge-blue">SCREEN</span></div>
+  <div class="task-body">
+    <p>File: <code>app/history.tsx</code></p>
+    <ul>
+      <li>Header: "← History" with back button</li>
+      <li>FlatList of past sessions, most recent first</li>
+      <li>Each row: Day name + date | Total duration | Exercises count</li>
+      <li>Tap row to expand (in-line, not new screen): shows per-exercise actual vs predicted times</li>
+      <li>Empty state: "No sessions yet. Complete your first workout!"</li>
+      <li>Show last 50 sessions maximum</li>
+    </ul>
+  </div>
+  <div class="ac"><div class="ac-label">✓ Acceptance</div><div class="ac-text">Sessions appear correctly after completing workouts. Dates formatted correctly. Tap to expand shows set detail. Empty state shows on fresh install.</div></div>
+</div>
+
+<div class="task">
+  <div class="task-header"><span class="task-name">4.5 — Settings Screen</span><span class="badge badge-blue">SCREEN</span></div>
+  <div class="task-body">
+    <p>File: <code>app/settings.tsx</code></p>
+    <ul>
+      <li>Header: "← Settings"</li>
+      <li>Section: Timer Defaults
+        <ul>
+          <li>T1 set duration: slider 30s–90s (default 60s), shows current value</li>
+          <li>T1 break: slider 90s–240s (default 150s)</li>
+          <li>Standard set: slider 20s–60s (default 40s)</li>
+          <li>Standard break: slider 60s–150s (default 90s)</li>
+        </ul>
+      </li>
+      <li>Section: Duration Limits
+        <ul>
+          <li>Target duration: 60 / 75 / 90 min (segmented control)</li>
+          <li>Warning at: 90 / 105 / 120 min (segmented control)</li>
+        </ul>
+      </li>
+      <li>Section: Learning
+        <ul>
+          <li>Min sessions before adapting: 2 / 3 / 5 (segmented control)</li>
+          <li>Red "Reset Learning Data" button with confirmation dialog</li>
+        </ul>
+      </li>
+      <li>All changes auto-save via <code>updateSettings</code></li>
+    </ul>
+    <div class="info"><div class="info-label">ℹ Sliders</div>Use <code>@react-native-community/slider</code> or build a simple custom slider with PanGestureHandler. Sliders snap to 5-second increments.</div>
+  </div>
+  <div class="ac"><div class="ac-label">✓ Acceptance</div><div class="ac-text">Changes persist after app restart. After adjusting T1 break to 180s, the next workout session uses 180s for T1 breaks. Reset Learning Data clears timingRecords but preserves sessions and settings.</div></div>
+</div>
+
+</div><!-- /task-grid -->
+</section>
+
+<!-- ════════════════════════════════════════════════════════════ -->
+<section id="phase5">
+<h2><span class="phase-num">5</span> GitHub Actions — Android APK Build</h2>
+
+<div class="task-grid">
+
+<div class="task">
+  <div class="task-header"><span class="task-name">5.1 — eas.json and prebuild config</span><span class="badge badge-amber">BUILD</span></div>
+  <div class="task-body">
+    <p>Create <code>eas.json</code> at project root:</p>
+    <pre><code>{
+  "cli": { "version": ">= 10.0.0" },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal"
+    },
+    "preview": {
+      "distribution": "internal",
+      "android": { "buildType": "apk" }
+    },
+    "production": {
+      "android": { "buildType": "apk" }
+    }
+  }
+}</code></pre>
+    <p>Add a <code>.gitignore</code> entry to exclude the generated android/ folder from the repo (it gets regenerated in CI):</p>
+    <pre><code># .gitignore additions
+android/
+ios/
+.expo/</code></pre>
+  </div>
+</div>
+
+<div class="task">
+  <div class="task-header"><span class="task-name">5.2 — Keystore generation (one-time, local)</span><span class="badge badge-red">SECRETS</span></div>
+  <div class="task-body">
+    <p>Run this once locally to generate your signing keystore. Do this BEFORE setting up GitHub Actions.</p>
+    <pre><code>keytool -genkeypair \
+  -v \
+  -storetype PKCS12 \
+  -keystore workout-timer.keystore \
+  -alias workouttimer \
+  -keyalg RSA \
+  -keysize 2048 \
+  -validity 10000</code></pre>
+    <p>When prompted, fill in your details. Remember the passwords you enter. Then convert to base64 for the GitHub Secret:</p>
+    <pre><code>base64 -i workout-timer.keystore | pbcopy  # macOS — copies to clipboard</code></pre>
+    <p>Add the following secrets to your GitHub repo under <strong>Settings → Secrets → Actions</strong>:</p>
+    <table>
+      <tr><th>Secret Name</th><th>Value</th></tr>
+      <tr><td><code>ANDROID_KEYSTORE_BASE64</code></td><td>The base64 output from above</td></tr>
+      <tr><td><code>ANDROID_KEY_ALIAS</code></td><td><code>workouttimer</code></td></tr>
+      <tr><td><code>ANDROID_KEY_PASSWORD</code></td><td>The key password you chose</td></tr>
+      <tr><td><code>ANDROID_STORE_PASSWORD</code></td><td>The store password you chose</td></tr>
+    </table>
+    <div class="warn"><div class="warn-label">⚠ Keep the keystore file safe</div>Back up workout-timer.keystore somewhere secure (NOT in the git repo). Add it to .gitignore. You need it if you ever want to update the app manually.</div>
+  </div>
+</div>
+
+<div class="task">
+  <div class="task-header"><span class="task-name">5.3 — GitHub Actions workflow</span><span class="badge badge-green">CI</span></div>
+  <div class="task-body">
+    <p>Create <code>.github/workflows/build-apk.yml</code>:</p>
+    <pre><code>name: Build Android APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:  # allow manual trigger from Actions tab
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Expo CLI
+        run: npm install -g expo-cli
+
+      - name: Run Expo Prebuild (Android only)
+        run: npx expo prebuild --platform android --no-install --clean
+        env:
+          EXPO_NO_TELEMETRY: 1
+
+      - name: Decode keystore
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android/app/workout-timer.keystore
+
+      - name: Write key.properties
+        run: |
+          cat > android/key.properties &lt;&lt;EOF
+          storePassword=${{ secrets.ANDROID_STORE_PASSWORD }}
+          keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
+          keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
+          storeFile=workout-timer.keystore
+          EOF
+
+      - name: Update build.gradle for signing
+        run: |
+          # Inject signing config into android/app/build.gradle
+          # This sed command adds signingConfigs before buildTypes if not present
+          python3 scripts/patch-build-gradle.py
+
+      - name: Build Release APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: workout-timer-v${{ github.run_number }}
+          path: android/app/build/outputs/apk/release/app-release.apk
+          retention-days: 30
+          if-no-files-found: error</code></pre>
+
+    <p>Create <code>scripts/patch-build-gradle.py</code>:</p>
+    <pre><code>#!/usr/bin/env python3
+"""Patches android/app/build.gradle to add release signing config."""
+import re, pathlib
+
+gradle_path = pathlib.Path('android/app/build.gradle')
+content = gradle_path.read_text()
+
+signing_config = """
+    signingConfigs {
+        release {
+            storeFile file('workout-timer.keystore')
+            storePassword System.getProperty('ANDROID_STORE_PASSWORD', '') ?: new File('../key.properties').with { f -> f.exists() ? (new java.util.Properties().tap { load(f.newInputStream()) })['storePassword'] : '' }
+            keyAlias System.getProperty('ANDROID_KEY_ALIAS', '') ?: new File('../key.properties').with { f -> f.exists() ? (new java.util.Properties().tap { load(f.newInputStream()) })['keyAlias'] : '' }
+            keyPassword System.getProperty('ANDROID_KEY_PASSWORD', '') ?: new File('../key.properties').with { f -> f.exists() ? (new java.util.Properties().tap { load(f.newInputStream()) })['keyPassword'] : '' }
+        }
+    }
+"""
+
+if 'signingConfigs' not in content:
+    content = content.replace('buildTypes {', signing_config + '\n    buildTypes {')
+
+# Update release buildType to use signing config
+content = re.sub(
+    r'(release \{[^}]*)(minifyEnabled)',
+    r'\1signingConfig signingConfigs.release\n            \2',
+    content
+)
+
+gradle_path.write_text(content)
+print("build.gradle patched successfully")</code></pre>
+
+    <div class="info"><div class="info-label">ℹ How to get your APK</div>
+    <ol>
+      <li>Push code to <code>main</code> branch</li>
+      <li>Go to repo → <strong>Actions</strong> tab</li>
+      <li>Click the latest "Build Android APK" run</li>
+      <li>Scroll down to <strong>Artifacts</strong></li>
+      <li>Download <code>workout-timer-vN.zip</code> — contains the APK</li>
+      <li>Transfer APK to Android phone and install (Settings → Allow from unknown sources)</li>
+    </ol>
+    </div>
+  </div>
+  <div class="ac"><div class="ac-label">✓ Acceptance</div><div class="ac-text">Green checkmark on the GitHub Actions run. Artifact appears at bottom of the run summary page. APK installs on a physical Android device. App opens, navigates, timer functions, and screen stays on.</div></div>
+</div>
+
+<div class="task">
+  <div class="task-header"><span class="task-name">5.4 — Manual trigger button</span><span class="badge badge-blue">CI</span></div>
+  <div class="task-body">
+    <p>The <code>workflow_dispatch</code> trigger in the YAML above already enables manual builds. To trigger a build manually:</p>
+    <ul>
+      <li>Go to your repo on GitHub</li>
+      <li>Click <strong>Actions</strong> tab</li>
+      <li>Click "Build Android APK" in the left sidebar</li>
+      <li>Click <strong>"Run workflow"</strong> button (top right)</li>
+      <li>Select branch <code>main</code> and click green "Run workflow"</li>
+    </ul>
+    <p>This allows you to build a new APK on demand without pushing code changes.</p>
+  </div>
+  <div class="ac"><div class="ac-label">✓ Acceptance</div><div class="ac-text">Manual trigger produces a new APK artifact. Build completes in under 20 minutes.</div></div>
+</div>
+
+</div><!-- /task-grid -->
+</section>
+
+<!-- SUMMARY TABLE -->
+<section>
+<h2><span class="phase-num">✦</span> Exercise Type Timing Reference</h2>
+<table>
+  <tr>
+    <th>Type</th><th>Set Duration</th><th>Break Duration</th><th>Examples</th><th>Notes</th>
+  </tr>
+  <tr>
+    <td><span class="pill pill-amber">TIER1</span></td>
+    <td>60s (adaptive)</td>
+    <td>2:30 (adaptive)</td>
+    <td>Bench Press, Squats, Military Press, Deadlifts</td>
+    <td>Heavy compounds need full recovery. Alert at target, timer keeps running.</td>
+  </tr>
+  <tr>
+    <td><span class="pill pill-green">STANDARD</span></td>
+    <td>40s (adaptive)</td>
+    <td>1:30 (adaptive)</td>
+    <td>Incline DB, Barbell Curls, Lateral Raises, DB Rows</td>
+    <td>Anabolic pace. Shorter break keeps intensity up.</td>
+  </tr>
+  <tr>
+    <td><span class="pill pill-blue">AMRAP</span></td>
+    <td>Open-ended</td>
+    <td>1:30 (adaptive)</td>
+    <td>Ab Roller, Dips, Pull-Ups</td>
+    <td>No set target. Spinning ring. User taps DONE when done.</td>
+  </tr>
+  <tr>
+    <td><span class="pill pill-green">TIMED</span></td>
+    <td>60s fixed</td>
+    <td>1:00 (adaptive)</td>
+    <td>Plank</td>
+    <td>Fixed prescription. Ring fills to 60s like a SET but with fixed duration.</td>
+  </tr>
+  <tr>
+    <td><span class="pill pill-red">CARDIO</span></td>
+    <td colspan="4">⛔ EXCLUDED from timer — not in exercise arrays at all</td>
+  </tr>
+</table>
+
+<h2 style="margin-top:40px"><span class="phase-num">✦</span> Estimated Workout Durations</h2>
+<table>
+  <tr><th>Day</th><th>Focus</th><th>Exercises</th><th>Total Sets</th><th>Estimated Time</th></tr>
+  <tr><td><span class="pill pill-green">Monday</span></td><td>Chest / Biceps / Abs</td><td>7</td><td>23</td><td>~52 min</td></tr>
+  <tr><td><span class="pill pill-amber">Tuesday</span></td><td>Legs</td><td>4</td><td>14</td><td>~38 min</td></tr>
+  <tr><td><span class="pill pill-blue">Thursday</span></td><td>Shoulders / Triceps / Abs</td><td>7</td><td>23</td><td>~53 min</td></tr>
+  <tr><td><span class="pill pill-green">Friday</span></td><td>Back / Rear Delts</td><td>5</td><td>17</td><td>~43 min</td></tr>
+  <tr><td colspan="4"><em>All well within the 90-minute target. Plenty of buffer for T1 sets running long.</em></td><td></td></tr>
+</table>
+</section>
+
+</main>
+
+<script>
+  // Highlight nav based on scroll
+  const sections = document.querySelectorAll('section[id]');
+  const navLinks = document.querySelectorAll('nav a');
+  window.addEventListener('scroll', () => {
+    let current = '';
+    sections.forEach(s => {
+      if (window.scrollY >= s.offsetTop - 100) current = s.id;
+    });
+    navLinks.forEach(a => {
+      a.classList.toggle('active', a.getAttribute('href') === '#' + current);
+    });
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,472 @@
+# Workout Timer — UI Design Prompts
+# Screen-by-screen descriptions for Claude Code / Lovable / v0
+# React Native (Expo) · Dark OLED · Android
+
+=======================================================================
+GLOBAL DESIGN LANGUAGE
+=======================================================================
+
+App name: Workout Timer
+Platform: Android (React Native / Expo)
+Mode: Dark only — designed for OLED screens, true blacks
+Typography: System font (Roboto on Android). No custom font.
+Icon style: Line icons (Lucide or Expo vector icons)
+
+Colour palette:
+  bg          #0A0A0A  — screen background (true near-black)
+  surface1    #111111  — cards, list rows
+  surface2    #1C1C1C  — elevated modals, sheets
+  surface3    #262626  — active/pressed states
+  green       #22D46E  — SET phase, primary CTA, T1 active ring
+  blue        #3B82F6  — BREAK phase, rest ring, secondary CTA
+  amber       #F59E0B  — T1 badge, 90-min target warning tint
+  red         #EF4444  — overtime ring, 2-hour warning
+  text1       #F0F0F0  — headings, big numbers
+  text2       #888888  — sublabels, secondary info
+  border      #2A2A2A  — card outlines, dividers
+
+Spacing unit: 8px base (8 / 16 / 24 / 32 / 48)
+Border radius: cards 12px, buttons 16px, badges 20px
+Button height: primary 64px / secondary 48px
+Minimum tap target: 44×44px everywhere
+Bottom-heavy layout: all primary actions in the bottom third of screen
+SafeAreaView: always applied (notch + gesture bar safe)
+
+The app has 5 screens. Each prompt below is self-contained.
+
+=======================================================================
+SCREEN 1 — HOME (Today's Workout)
+File: app/index.tsx
+=======================================================================
+
+Build a React Native screen for the home / today's workout view.
+Background: #0A0A0A. SafeAreaView wrapping everything.
+
+--- HEADER BAR ---
+Horizontal flex row, padding 16px sides, paddingTop 8px.
+Left: app title "WORKOUT TIMER" in text2 (#888888), fontSize 12,
+  fontWeight 600, letterSpacing 2, uppercase.
+Right: two icon buttons side by side, gap 8px.
+  - History icon (clock or list icon), 44×44 tap target, color text2.
+  - Settings icon (gear), 44×44 tap target, color text2.
+
+--- DAY HERO BLOCK ---
+paddingHorizontal 24, paddingTop 32, paddingBottom 24.
+
+Day name: "MONDAY" — fontSize 40, fontWeight 900, color green (#22D46E),
+  letterSpacing -1. This is the dominant visual element.
+
+Muscle groups subtitle: "Chest · Biceps · Abs" — fontSize 15,
+  fontWeight 400, color text2 (#888888), marginTop 4.
+
+--- STATS CARD ---
+marginHorizontal 24, marginBottom 24.
+Background surface1 (#111111), borderRadius 12,
+  border 1px solid #2A2A2A, padding 16px.
+
+Two stats side by side (flex row, space-between):
+  Left:  label "EXERCISES" text2 fontSize 10 uppercase letterSpacing 1
+         value "7" text1 fontSize 28 fontWeight 800
+  Right: label "EST. TIME" text2 fontSize 10 uppercase letterSpacing 1
+         value "~52 min" text1 fontSize 28 fontWeight 800
+
+--- EXERCISE LIST ---
+Label: "TODAY'S PROGRAMME" — text2, fontSize 11, fontWeight 600,
+  letterSpacing 1.5, uppercase, paddingHorizontal 24, marginBottom 12.
+
+ScrollView (flex 1, no scroll indicators).
+Each exercise row: paddingHorizontal 24, paddingVertical 12,
+  borderBottomWidth 1, borderColor #1A1A1A.
+
+Row layout (flex row, align center, gap 12):
+  Left: type indicator:
+    - If TIER1: amber pill badge "T1" — background rgba(245,158,11,0.15),
+        color amber, fontSize 10, fontWeight 800, paddingHorizontal 8,
+        paddingVertical 3, borderRadius 20.
+    - Otherwise: 8px circle, color surface3 (#262626), filled.
+  Middle (flex 1):
+    - Exercise name: text1, fontSize 15, fontWeight 500.
+    - Reps: text2, fontSize 12, marginTop 2. e.g. "4 × 8-10"
+  Right: chevron-right icon, color surface3, size 16.
+
+--- BOTTOM CTA (sticky) ---
+Position: absolute bottom 0, left 0, right 0.
+Background: linear gradient from transparent to #0A0A0A over 32px,
+  then solid #0A0A0A below.
+Padding: 16px sides, paddingBottom 32px (safe area), paddingTop 16px.
+
+Button: full width, height 64px, borderRadius 16px,
+  background green (#22D46E), shadow: 0 4 24 rgba(34,212,110,0.3).
+Text: "START WORKOUT" — color #000000, fontSize 17, fontWeight 800,
+  letterSpacing 0.5.
+Left of text: ▶ play icon, size 18, color #000.
+
+--- REST DAY STATE (Wed / Sat / Sun) ---
+Replace the exercise list and CTA with:
+  Centred vertically in remaining space.
+  Large "😴" emoji, fontSize 64, textAlign center.
+  "REST DAY" — fontSize 36, fontWeight 900, color text2, marginTop 24.
+  "Sleep in. Your muscles grow during rest." — text2, fontSize 15,
+    textAlign center, marginTop 8, maxWidth 260, alignSelf center.
+  Divider line 1px border, marginVertical 32, color surface2.
+  "Next up:" label text2, fontSize 12, uppercase, letterSpacing 1.
+  "Monday — Chest, Biceps & Abs" — text1, fontSize 16, fontWeight 600,
+    marginTop 6.
+
+=======================================================================
+SCREEN 2 — ACTIVE WORKOUT (SET phase)
+File: app/workout/index.tsx  [phase === 'SET' or 'AMRAP' or 'TIMED']
+=======================================================================
+
+Build the main timer screen for when a set is in progress.
+This screen must be full-focus with no distractions.
+Background: #0A0A0A. SafeAreaView.
+
+--- HEADER (fixed top) ---
+Flex row, paddingHorizontal 16, paddingTop 8, alignItems center.
+
+Left: ✕ abandon button — 44×44, icon color text2.
+  On press: show confirmation Alert "Abandon workout?" with
+  Cancel / Abandon options.
+
+Centre (flex 1): elapsed workout clock.
+  Format "0:23:45" — fontSize 17, fontWeight 700, color text1,
+  textAlign center, fontVariant tabular-nums.
+  If elapsed > 90 min: color amber (#F59E0B).
+  If elapsed > 120 min: color red (#EF4444).
+
+Right: compact progress bar.
+  Width 80px, height 4px, borderRadius 2, background surface2.
+  Filled portion: color green normally, amber near target, red past target.
+  Below bar: small label "90m" — text2, fontSize 10.
+
+--- EXERCISE INFO BLOCK ---
+paddingHorizontal 24, paddingTop 20, paddingBottom 8.
+
+Top row (flex row, gap 8, alignItems center):
+  Exercise name: text1, fontSize 20, fontWeight 700, flex 1, lineHeight 26.
+  If TIER1: amber pill badge "T1" same style as home screen.
+
+Bottom row: "SET 2 OF 4  ·  8-10 reps" — text2, fontSize 14,
+  fontWeight 500, marginTop 6.
+
+--- CIRCULAR TIMER (centred, fills remaining space) ---
+Centred in flex 1 space between info and buttons.
+Container: alignItems center, justifyContent center.
+
+SVG circle: size 280×280.
+  Background track circle: stroke #1C1C1C, strokeWidth 12, fill none.
+  Progress arc: stroke #22D46E (green), strokeWidth 12, fill none,
+    strokeLinecap round, strokeDasharray=circumference,
+    strokeDashoffset animated (Reanimated useAnimatedProps).
+    Arc starts from 12 o'clock (rotate SVG -90deg around centre).
+    Fills clockwise from 0 to full as elapsed approaches target.
+
+Centre text overlay (absolute, centred over SVG):
+  Main time: formatTime(elapsed) — e.g. "0:47"
+    fontSize 52, fontWeight 900, color text1, letterSpacing -2,
+    fontVariant tabular-nums.
+  Sub-label below: "elapsed" — text2, fontSize 12, fontWeight 500,
+    uppercase, letterSpacing 2, marginTop 4.
+
+Target label below SVG: "target: 1:00" — text2, fontSize 12,
+  marginTop 12.
+
+--- AMRAP VARIANT ---
+When phase is AMRAP:
+  Ring shows a 25% arc that rotates slowly (Reanimated withRepeat loop).
+  Ring colour: green (#22D46E).
+  Centre text: "GO" (until user taps Done, then shows elapsed).
+  Target label: "go until failure" in text2.
+
+--- SET DOTS ---
+Below the timer + target label, centred, flex row, gap 10.
+Each dot: 12px circle.
+  Completed sets: filled green circle.
+  Current set: filled green circle, subtle pulse scale animation.
+  Remaining sets: outline only, border 1.5px, color surface3.
+
+--- BOTTOM BUTTONS (fixed) ---
+Position absolute bottom 0, full width.
+Background: linear gradient transparent→#0A0A0A over 24px then solid.
+Padding: 16 sides, paddingBottom 32 (safe area).
+
+Single DONE button:
+  Full width, height 64, borderRadius 16, background green (#22D46E).
+  Text "✓  DONE" — color #000, fontSize 17, fontWeight 800.
+  Press: scale to 0.97, haptic heavy impact.
+  After alert fires (set target reached): button pulses with a subtle
+    glow animation (shadow expands and contracts) to indicate it's
+    waiting for the tap.
+
+=======================================================================
+SCREEN 3 — ACTIVE WORKOUT (BREAK phase)
+File: app/workout/index.tsx  [phase === 'BREAK']
+=======================================================================
+
+Same screen file as Screen 2 but in BREAK phase state.
+All layout rules identical. Only these elements change:
+
+--- EXERCISE INFO BLOCK ---
+Top row: same exercise name + T1 badge (showing which exercise comes next).
+Bottom row: "BREAK  ·  SET 3 NEXT" — color blue (#3B82F6), fontSize 14.
+
+--- CIRCULAR TIMER ---
+Progress arc: colour blue (#3B82F6).
+Arc depletes clockwise (full at start of break, empty at end).
+  strokeDashoffset goes from 0 (full) to circumference (empty).
+
+Centre text: remaining break time counting DOWN.
+  e.g. "2:03" — fontSize 52, fontWeight 900, color text1.
+Sub-label: "remaining" — text2 label.
+
+--- OVERTIME STATE (when break counter passes 0) ---
+Arc colour switches to red (#EF4444). Arc stays at 0 (empty).
+Centre text: "+0:45" — color red, fontSize 52, fontWeight 900.
+  This is time PAST the break end (counting up again).
+Sub-label: "OVERTIME" — color red, fontSize 12, uppercase, letterSpacing 2.
+
+Target label: "target: 2:30" — unchanged, text2.
+
+--- BOTTOM BUTTONS ---
+Two buttons stacked, gap 10.
+
+Primary: "▶  START NEXT SET" — full width, height 64, borderRadius 16,
+  background blue (#3B82F6).
+  Text: color white, fontSize 17, fontWeight 800.
+
+Secondary: "SKIP BREAK" — full width, height 48, borderRadius 12,
+  background transparent, border 1.5px solid surface3.
+  Text: color text2, fontSize 15, fontWeight 600.
+
+Both buttons stop alert + record actual break duration + advance state.
+
+=======================================================================
+SCREEN 4 — WORKOUT COMPLETE
+File: app/complete.tsx
+=======================================================================
+
+Celebratory completion screen. No navigation header. SafeAreaView.
+Background: #0A0A0A.
+
+--- HERO AREA (top half, centred) ---
+paddingTop 48.
+Large animated checkmark:
+  Green circle (80px diameter, background green #22D46E).
+  White ✓ inside, size 40.
+  On mount: scale from 0→1.15→1.0 with spring animation (Reanimated).
+
+"WORKOUT COMPLETE" — text1, fontSize 26, fontWeight 900,
+  letterSpacing -0.5, textAlign center, marginTop 24.
+
+Total duration (the number is the hero):
+  fontSize 56, fontWeight 900, color green, textAlign center,
+  marginTop 8, fontVariant tabular-nums.
+  e.g. "1h 04m"
+Sub-label: "total time" — text2, fontSize 13, textAlign center, marginTop 4.
+
+--- STATS ROW ---
+marginTop 32, marginHorizontal 24.
+Surface1 card, borderRadius 12, border 1px border, padding 20.
+Two stats side by side:
+  Left:  "EXERCISES" label + count value (e.g. "7")
+  Right: "SETS DONE" label + total sets count (e.g. "23")
+Same typographic style as Home stats card.
+
+--- EXERCISE SUMMARY LIST ---
+marginTop 16, marginHorizontal 24.
+Label: "SESSION BREAKDOWN" — text2, fontSize 11, uppercase, letterSpacing 1.5,
+  marginBottom 8.
+
+ScrollView (maxHeight 240 so button is always visible).
+Each row: paddingVertical 10, borderBottom 1px border.
+  Left: exercise name — text1, fontSize 14, fontWeight 500.
+  Right: "4 sets" or "3 sets" — text2, fontSize 13.
+
+--- BOTTOM CTA ---
+Position: absolute bottom 0, full width.
+Same gradient footer as other screens.
+Button: full width, height 64, borderRadius 16, background green.
+Text: "DONE" — color #000, fontSize 17, fontWeight 800.
+On press: navigate to Home (router.replace('/'))
+
+=======================================================================
+SCREEN 5 — HISTORY
+File: app/history.tsx
+=======================================================================
+
+Past sessions log. SafeAreaView. Background #0A0A0A.
+
+--- HEADER ---
+Flex row, paddingHorizontal 16, paddingTop 8, alignItems center, gap 12.
+Back button (chevron-left icon), 44×44, color text2.
+Title "HISTORY" — text1, fontSize 18, fontWeight 700, flex 1.
+
+--- EMPTY STATE ---
+If no sessions:
+  Centred vertically: clock icon (large, color surface3),
+  "No sessions yet" text1 fontSize 18 fontWeight 600 marginTop 16,
+  "Complete your first workout to see your history here."
+  text2, fontSize 14, textAlign center, maxWidth 260.
+
+--- SESSION LIST ---
+FlatList, paddingHorizontal 0.
+ItemSeparatorComponent: 1px border line color #1A1A1A.
+
+Each list item: pressable row, paddingHorizontal 24, paddingVertical 16.
+Background: bg (#0A0A0A). On press: background surface1 (highlight).
+
+Layout: flex row.
+Left side (flex 1):
+  Day name + date row: flex row, gap 8, alignItems center.
+    Day badge: "MON" / "TUE" / "THU" / "FRI" —
+      pill badge, background surface2, text text2 fontSize 11 fontWeight 700.
+    Date: "15 Jun 2026" — text2, fontSize 13.
+  Muscle groups: text2, fontSize 12, marginTop 3.
+    e.g. "Chest · Biceps · Abs"
+
+Right side: textAlign right.
+  Duration: text1, fontSize 20, fontWeight 800.
+    e.g. "1h 04m"
+  Sets count: text2, fontSize 12, marginTop 2.
+    e.g. "23 sets"
+
+--- EXPANDED DETAIL (tap to expand inline) ---
+When a row is tapped, it expands below the row summary (no new screen).
+Animated height expansion (LayoutAnimation or Reanimated).
+Background: surface1, padding 16, borderRadius 0 0 8 8.
+
+Exercise breakdown table:
+Each exercise: flex row, paddingVertical 6.
+  Left: exercise name (text2, fontSize 13, flex 1).
+  Right: "avg set 0:52  ·  avg break 1:28" — text2, fontSize 12.
+
+"Collapse ↑" text button at bottom of expanded section,
+  color text2, fontSize 12, textAlign center, paddingVertical 8.
+
+=======================================================================
+SCREEN 6 — SETTINGS
+File: app/settings.tsx
+=======================================================================
+
+Preferences screen. SafeAreaView. Background #0A0A0A.
+
+--- HEADER ---
+Same pattern as History: back button + "SETTINGS" title.
+
+--- SCROLLVIEW CONTENT ---
+Padded 24px sides.
+
+SECTION: "TIMER DEFAULTS"
+Section label: text2, fontSize 11, uppercase, letterSpacing 1.5,
+  marginBottom 12, marginTop 24.
+
+Each setting row: surface1 card, borderRadius 12, border, padding 16,
+  marginBottom 8.
+
+Row structure:
+  Top: flex row, justifyContent space-between.
+    Setting name: text1, fontSize 15, fontWeight 500.
+    Current value: green (#22D46E), fontSize 15, fontWeight 700.
+      e.g. "60s" or "2:30"
+  Bottom: slider (Slider component), marginTop 12.
+    minimumTrackTintColor green, maximumTrackTintColor surface3,
+    thumbTintColor green.
+    Step: 5 seconds.
+
+Settings in this section (with ranges):
+  "T1 Set Duration"    30s – 90s    default 60s
+  "T1 Rest Period"     1:30 – 4:00  default 2:30
+  "Standard Set"       20s – 60s    default 40s
+  "Standard Rest"      1:00 – 2:30  default 1:30
+
+SECTION: "WORKOUT DURATION"
+Same section label style.
+
+"Workout Target" row: surface1 card, padding 16.
+  Label: text1 fontSize 15.
+  Below: segmented control (3 options: "60 min" / "75 min" / "90 min").
+    Selected: background green, text black, fontWeight 700.
+    Unselected: background surface2, text text2.
+    Full width, height 40, borderRadius 8.
+
+"Overtime Warning" row: same card style.
+  Segmented: "90 min" / "105 min" / "120 min".
+
+SECTION: "LEARNING"
+"Min Sessions to Adapt" row: segmented control "2" / "3" / "5".
+Small explanation below: text2, fontSize 12, lineHeight 18.
+  "After this many sessions per exercise, the app adapts
+   break times to match your actual pace."
+
+"Reset Learning Data" row: surface1 card, padding 16.
+  Single pressable full-width row.
+  Icon: trash/reset icon, color red.
+  Text: "Reset Learned Timings" — color red, fontSize 15, fontWeight 500.
+  Sub: "Resets adapted times. Sessions history kept." — text2, fontSize 12.
+  On press: Alert "This will reset all adapted timing data. Are you sure?"
+    with Cancel / Reset buttons.
+
+=======================================================================
+COMPONENT: TWO-HOUR WARNING OVERLAY
+Used inside: app/workout/index.tsx when showWarning === true
+=======================================================================
+
+Full-screen absolute overlay, zIndex 999.
+Background: rgba(0,0,0,0.88).
+Centred content (justifyContent center, alignItems center, padding 32).
+
+Card: background surface2 (#1C1C1C), borderRadius 20,
+  padding 32, width 100%, maxWidth 340, alignSelf center.
+  Border: 1px solid rgba(239,68,68,0.3).
+
+Content (centred):
+  Warning icon: ⚠️ or triangle-alert Lucide icon, color red, size 40.
+  Title: "2 Hours In" — text1, fontSize 24, fontWeight 800, marginTop 16.
+  Body: "You've been training for over 2 hours. Consider wrapping up
+    or finishing your last exercise." — text2, fontSize 14,
+    lineHeight 22, textAlign center, marginTop 8.
+  
+  Button: marginTop 28, full width, height 56, borderRadius 14,
+    background green.
+  Text: "GOT IT, KEEP GOING" — color #000, fontSize 16, fontWeight 800.
+
+Animation: card slides up from y+60 to y=0 with spring on mount
+  (Reanimated useAnimatedStyle + withSpring).
+
+=======================================================================
+NAVIGATION FLOW SUMMARY
+=======================================================================
+
+Home ──(START WORKOUT)──► Workout (SET phase)
+                              │
+                          (tap DONE)
+                              │
+                         Workout (BREAK phase)
+                              │
+                     (tap START NEXT SET)
+                              │
+                    ┌─────────┴──────────┐
+                    │                    │
+               (more sets)         (last set of
+                    │               last exercise)
+                    ▼                    ▼
+               Workout (SET)      Workout (COMPLETE)
+                                         │
+                                    (auto-nav)
+                                         ▼
+                                  Complete Screen
+                                         │
+                                    (tap DONE)
+                                         ▼
+                                       Home
+
+Home ──(history icon)──► History
+Home ──(settings icon)──► Settings
+History ──(back)──► Home
+Settings ──(back)──► Home
+Complete ──(DONE)──► Home (router.replace)
+
+=======================================================================
+END OF UI DESIGN PROMPTS
+=======================================================================

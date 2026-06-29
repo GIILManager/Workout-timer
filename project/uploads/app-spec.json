@@ -1,0 +1,172 @@
+{
+  "app": {
+    "name": "WorkoutTimer",
+    "bundleId": "com.briangitau.workouttimer",
+    "platform": "android",
+    "version": "1.0.0",
+    "buildTool": "expo-prebuild-gradle"
+  },
+
+  "screens": {
+    "Home": {
+      "route": "/",
+      "purpose": "Show today's workout, estimated time, exercise list, Start CTA",
+      "states": ["has_workout", "rest_day"],
+      "actions": ["start_workout", "navigate_history", "navigate_settings"]
+    },
+    "Workout": {
+      "route": "/workout",
+      "purpose": "Main timer screen — drives through all sets and breaks",
+      "states": ["set_active", "break_active", "amrap_set", "timed_set", "exercise_transition"],
+      "actions": ["done_set", "start_next_set", "skip_break", "abandon_workout"]
+    },
+    "Complete": {
+      "route": "/complete",
+      "purpose": "Session summary — total time, exercises done, PRs flagged",
+      "actions": ["save_session", "go_home"]
+    },
+    "History": {
+      "route": "/history",
+      "purpose": "List of past sessions, tap to see detail",
+      "actions": ["view_session_detail", "go_back"]
+    },
+    "Settings": {
+      "route": "/settings",
+      "purpose": "Adjust default timings, reset learned data",
+      "actions": ["save_settings", "reset_learning", "go_back"]
+    }
+  },
+
+  "entities": {
+    "Exercise": {
+      "id": "string",
+      "name": "string",
+      "type": "'TIER1' | 'STANDARD' | 'AMRAP' | 'TIMED' | 'CARDIO'",
+      "sets": "number",
+      "reps": "string"
+    },
+
+    "WorkoutDay": {
+      "day": "'monday' | 'tuesday' | 'thursday' | 'friday'",
+      "dayOfWeek": "number (1=Mon, 2=Tue, 4=Thu, 5=Fri)",
+      "name": "string",
+      "muscleGroups": "string",
+      "exercises": "Exercise[]"
+    },
+
+    "TimingDefaults": {
+      "TIER1": { "setDuration": 60, "breakDuration": 150 },
+      "STANDARD": { "setDuration": 40, "breakDuration": 90 },
+      "AMRAP": { "setDuration": null, "breakDuration": 90 },
+      "TIMED": { "setDuration": 60, "breakDuration": 60 },
+      "CARDIO": "skipped"
+    },
+
+    "TimingRecord": {
+      "exerciseId": "string",
+      "setNumber": "number",
+      "setDuration": "number (seconds, null for AMRAP)",
+      "breakDuration": "number (seconds)",
+      "date": "string (ISO)",
+      "sessionId": "string"
+    },
+
+    "WorkoutSession": {
+      "id": "string (uuid)",
+      "day": "string",
+      "date": "string (ISO)",
+      "totalDuration": "number (seconds)",
+      "exercisesCompleted": "number",
+      "setRecords": "SetRecord[]",
+      "notes": "string?"
+    },
+
+    "SetRecord": {
+      "exerciseId": "string",
+      "exerciseName": "string",
+      "setNumber": "number",
+      "predictedSetDuration": "number | null",
+      "actualSetDuration": "number",
+      "predictedBreakDuration": "number | null",
+      "actualBreakDuration": "number",
+      "completedAt": "string (ISO)"
+    },
+
+    "UserSettings": {
+      "tier1SetDuration": "number (default: 60)",
+      "tier1BreakDuration": "number (default: 150)",
+      "standardSetDuration": "number (default: 40)",
+      "standardBreakDuration": "number (default: 90)",
+      "targetWorkoutMinutes": "number (default: 90)",
+      "warningWorkoutMinutes": "number (default: 120)",
+      "minSessionsForAdaptation": "number (default: 3)"
+    }
+  },
+
+  "asyncStorageKeys": {
+    "timing_history": "TimingRecord[] — all recorded set/break durations",
+    "session_history": "WorkoutSession[] — past sessions",
+    "user_settings": "UserSettings"
+  },
+
+  "workoutProgramme": {
+    "monday": {
+      "muscleGroups": "Chest, Biceps & Abs",
+      "exercises": [
+        { "id": "bench-press",     "name": "Flat Barbell Bench Press",    "type": "TIER1",    "sets": 4, "reps": "8-10" },
+        { "id": "incline-db",      "name": "Incline Dumbbell Bench",       "type": "STANDARD", "sets": 3, "reps": "10" },
+        { "id": "landmine-chest",  "name": "Landmine Chest Press",         "type": "STANDARD", "sets": 3, "reps": "12" },
+        { "id": "barbell-curls",   "name": "Standing Barbell Curls",       "type": "STANDARD", "sets": 4, "reps": "10" },
+        { "id": "preacher-curls",  "name": "Preacher Curls",               "type": "STANDARD", "sets": 3, "reps": "12" },
+        { "id": "leg-raises",      "name": "Leg Raises",                   "type": "STANDARD", "sets": 3, "reps": "15" },
+        { "id": "ab-roller",       "name": "Ab Roller",                    "type": "AMRAP",    "sets": 3, "reps": "Failure" }
+      ]
+    },
+    "tuesday": {
+      "muscleGroups": "Legs",
+      "exercises": [
+        { "id": "back-squats",     "name": "Barbell Back Squats",          "type": "TIER1",    "sets": 4, "reps": "8-10" },
+        { "id": "landmine-lunges", "name": "Landmine Reverse Lunges",      "type": "STANDARD", "sets": 3, "reps": "10/leg" },
+        { "id": "bulgarian-split", "name": "Bulgarian Split Squats",       "type": "STANDARD", "sets": 3, "reps": "10" },
+        { "id": "hip-thrusts",     "name": "Lying Hip Thrusts",            "type": "STANDARD", "sets": 4, "reps": "12" }
+      ]
+    },
+    "thursday": {
+      "muscleGroups": "Shoulders, Triceps & Abs",
+      "exercises": [
+        { "id": "military-press",  "name": "Standing Military Press",      "type": "TIER1",    "sets": 4, "reps": "8-10" },
+        { "id": "landmine-press",  "name": "Landmine Single-Arm Press",    "type": "STANDARD", "sets": 3, "reps": "10/arm" },
+        { "id": "lateral-raises",  "name": "Lateral Raises",               "type": "STANDARD", "sets": 4, "reps": "15" },
+        { "id": "skull-crushers",  "name": "Lying DB Extensions (Skull)",  "type": "STANDARD", "sets": 3, "reps": "12" },
+        { "id": "dips",            "name": "Dips",                         "type": "AMRAP",    "sets": 3, "reps": "Failure" },
+        { "id": "oblique-twists",  "name": "Oblique Twists",               "type": "STANDARD", "sets": 3, "reps": "20" },
+        { "id": "plank",           "name": "Plank",                        "type": "TIMED",    "sets": 3, "reps": "1 min" }
+      ]
+    },
+    "friday": {
+      "muscleGroups": "Back & Rear Delts",
+      "exercises": [
+        { "id": "deadlifts",       "name": "Deadlifts",                    "type": "TIER1",    "sets": 4, "reps": "6-8" },
+        { "id": "pull-ups",        "name": "Pull-Ups",                     "type": "AMRAP",    "sets": 3, "reps": "AMRAP" },
+        { "id": "landmine-rows",   "name": "Landmine Rows (Meadows)",      "type": "STANDARD", "sets": 4, "reps": "10" },
+        { "id": "db-rows",         "name": "One Arm Dumbbell Rows",        "type": "STANDARD", "sets": 3, "reps": "12" },
+        { "id": "rear-delt-flyes", "name": "Rear Delt Dumbbell Flyes",     "type": "STANDARD", "sets": 3, "reps": "15" }
+      ]
+    }
+  },
+
+  "estimatedWorkoutDurations": {
+    "monday":   "~52 min (excl. cardio)",
+    "tuesday":  "~38 min (excl. cardio)",
+    "thursday": "~53 min (excl. cardio)",
+    "friday":   "~43 min (excl. cardio)"
+  },
+
+  "githubActions": {
+    "trigger": "push to main branch",
+    "runner": "ubuntu-latest",
+    "steps": ["checkout", "node-setup", "java-17", "android-sdk", "install-deps", "expo-prebuild", "gradle-sign", "gradle-assembleRelease", "upload-artifact"],
+    "secrets": ["ANDROID_KEYSTORE_BASE64", "ANDROID_KEY_ALIAS", "ANDROID_KEY_PASSWORD", "ANDROID_STORE_PASSWORD"],
+    "artifact": "workout-timer-release.apk (from Actions tab)"
+  }
+}
