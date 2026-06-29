@@ -1,4 +1,5 @@
 import { router } from 'expo-router';
+import * as Crypto from 'expo-crypto';
 import React from 'react';
 import {
   ScrollView,
@@ -67,7 +68,7 @@ export default function HomeScreen() {
 
   function handleStartWorkout() {
     if (!today) return;
-    const sessionId = `session-${Date.now()}`;
+    const sessionId = Crypto.randomUUID();
     startWorkout(today, sessionId);
     const firstEx = today.exercises.find((e) => e.type !== 'CARDIO');
     if (firstEx) {

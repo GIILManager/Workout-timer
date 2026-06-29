@@ -4,10 +4,18 @@
     "slug": "workout-timer",
     "version": "1.0.0",
     "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
     "backgroundColor": "#0A0A0A",
     "platforms": ["android"],
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0A0A0A"
+    },
     "android": {
       "package": "com.briangitau.workouttimer",
+      "permissions": ["VIBRATE", "WAKE_LOCK"],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0A0A0A"
