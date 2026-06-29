@@ -1,0 +1,31 @@
+{
+  "expo": {
+    "name": "WorkoutTimer",
+    "slug": "workout-timer",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "backgroundColor": "#0A0A0A",
+    "platforms": ["android"],
+    "android": {
+      "package": "com.briangitau.workouttimer",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0A0A0A"
+      }
+    },
+    "plugins": [
+      "expo-router",
+      "expo-keep-awake",
+      [
+        "expo-av",
+        {
+          "microphonePermission": false
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "scheme": "workouttimer"
+  }
+}
