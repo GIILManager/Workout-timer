@@ -6,6 +6,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useHistoryStore } from '../src/store/historyStore';
 import { setupNotifications } from '../src/utils/notificationService';
+import { warmUpAlert } from '../src/utils/alertService';
 
 export default function RootLayout() {
   const hydrate = useHistoryStore((s) => s.hydrate);
@@ -13,6 +14,7 @@ export default function RootLayout() {
   useEffect(() => {
     hydrate();
     setupNotifications();
+    warmUpAlert();
   }, []);
 
   return (

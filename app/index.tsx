@@ -2,6 +2,7 @@ import { router } from 'expo-router';
 import * as Crypto from 'expo-crypto';
 import React from 'react';
 import {
+  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -13,7 +14,6 @@ import { useHistoryStore } from '../src/store/historyStore';
 import { useWorkoutStore } from '../src/store/workoutStore';
 import { getTodayWorkout, getNextWorkout, WORKOUTS } from '../src/data/workouts';
 import { getAdaptedTiming, estimateTotalDuration } from '../src/utils/timing';
-import { formatTime } from '../src/utils/time';
 import { Exercise, WorkoutDay } from '../src/types';
 
 function ClockIcon() {
@@ -62,12 +62,14 @@ export default function HomeScreen() {
   const timingRecords = useHistoryStore((s) => s.timingRecords);
   const startWorkout = useWorkoutStore((s) => s.startWorkout);
   const startSet = useWorkoutStore((s) => s.startSet);
+  const abandonWorkout = useWorkoutStore((s) => s.abandonWorkout);
+  const activeWorkout = useWorkoutStore((s) => s.activeWorkout);
+  const hasActive = !!activeWorkout;
 
   const today = getTodayWorkout();
   const nextWorkout = getNextWorkout();
 
-  function handleStartWorkout(workout: WorkoutDay | null = today, startIndex = 0) {
-    if (!workout) return;
+  function beginWorkout(workout: WorkoutDay, startIndex: number) {
     const sessionId = Crypto.randomUUID();
     startWorkout(workout, sessionId, startIndex);
     // The store resolves the actual starting index (skipping any cardio);
@@ -79,6 +81,43 @@ export default function HomeScreen() {
       startSet(timing.setDuration);
     }
     router.push('/workout');
+  }
+
+  function handleStartWorkout(workout: WorkoutDay | null = today, startIndex = 0) {
+    if (!workout) return;
+    // A workout is already running (you backed out without finishing it).
+    // Default to resuming the existing one rather than clobbering it.
+    if (hasActive) {
+      Alert.alert(
+        'Workout in progress',
+        'You already have a workout running. Resume it, or discard it and start this one?',
+        [
+          { text: 'Resume', onPress: () => router.push('/workout') },
+          {
+            text: 'Discard & Start',
+            style: 'destructive',
+            onPress: () => {
+              abandonWorkout();
+              beginWorkout(workout, startIndex);
+            },
+          },
+          { text: 'Cancel', style: 'cancel' },
+        ],
+      );
+      return;
+    }
+    beginWorkout(workout, startIndex);
+  }
+
+  function ResumeBanner() {
+    if (!hasActive) return null;
+    return (
+      <TouchableOpacity style={styles.resumeBanner} onPress={() => router.push('/workout')} activeOpacity={0.85}>
+        <View style={styles.resumeDot} />
+        <Text style={styles.resumeText}>Workout in progress — {activeWorkout?.name}</Text>
+        <Text style={styles.resumeAction}>RESUME ▸</Text>
+      </TouchableOpacity>
+    );
   }
 
   function DayPicker({ label }: { label: string }) {
@@ -118,6 +157,8 @@ export default function HomeScreen() {
           </View>
         </View>
 
+        <ResumeBanner />
+
         <View style={styles.restDayCenter}>
           <Text style={styles.restEmoji}>😴</Text>
           <Text style={styles.restTitle}>REST DAY</Text>
@@ -148,6 +189,8 @@ export default function HomeScreen() {
         </View>
       </View>
 
+      <ResumeBanner />
+
       <View style={styles.dayBlock}>
         <Text style={styles.dayName}>{today.name}</Text>
         <Text style={styles.muscleGroups}>{today.muscleGroups}</Text>
@@ -176,9 +219,15 @@ export default function HomeScreen() {
 
       <View style={styles.ctaContainer}>
         <DayPicker label="Switch workout" />
-        <TouchableOpacity style={styles.startBtn} onPress={() => handleStartWorkout()} activeOpacity={0.85}>
-          <Text style={styles.startBtnText}>▶  START WORKOUT</Text>
-        </TouchableOpacity>
+        {hasActive ? (
+          <TouchableOpacity style={styles.startBtn} onPress={() => router.push('/workout')} activeOpacity={0.85}>
+            <Text style={styles.startBtnText}>▶  RESUME WORKOUT</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity style={styles.startBtn} onPress={() => handleStartWorkout()} activeOpacity={0.85}>
+            <Text style={styles.startBtnText}>▶  START WORKOUT</Text>
+          </TouchableOpacity>
+        )}
       </View>
     </SafeAreaView>
   );
@@ -214,6 +263,15 @@ const styles = StyleSheet.create({
   tapHint: {
     fontSize: 12, color: '#555', paddingHorizontal: 24, marginBottom: 8,
   },
+  resumeBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    marginHorizontal: 16, marginTop: 8, marginBottom: 4,
+    backgroundColor: 'rgba(34,212,110,0.10)', borderWidth: 1, borderColor: 'rgba(34,212,110,0.35)',
+    borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12,
+  },
+  resumeDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#22D46E' },
+  resumeText: { flex: 1, fontSize: 13, fontWeight: '600', color: '#F0F0F0' },
+  resumeAction: { fontSize: 12, fontWeight: '800', color: '#22D46E', letterSpacing: 0.5 },
   exerciseList: { flex: 1 },
   exerciseRow: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
