@@ -7,37 +7,58 @@ import { TrackerExercise } from '../types';
 const API_URL = 'https://api.anthropic.com/v1/messages';
 const MODEL = 'claude-opus-4-8';
 
-const PROMPT = `You are reading a photo of a handwritten gym workout-tracker page.
-Transcribe it into JSON. Return ONLY the JSON object, no markdown, no commentary.
+// The prompt encodes Brian's exact handwritten shorthand so the model reads
+// the page the way he writes it.
+const PROMPT = `You are reading a photo of a printed "WORKOUT TRACKER" page that has been filled in by hand. Read it precisely and return JSON only.
 
-Schema:
+PAGE LAYOUT
+- Top: a MONTH (handwritten, e.g. "July") and a DAY heading (e.g. "MONDAY — Chest, Biceps & Abs").
+- A table of exercises. Each row has: the exercise name, a "Sets × Reps" TARGET (e.g. "4×8-10", "3×10", "3×12", "4×15", "3×Failure", "3×1 min"), then four WEEK columns (WEEK 1, WEEK 2, WEEK 3, WEEK 4). Each week column has set boxes labelled S1, S2, S3, S4 where weights/reps are handwritten. A small date (e.g. "25th") may be written above a week column.
+- Bottom: NOTES / PR's / FORM CUES, sometimes one note per week (and check-circles for cardio rows like "HIIT Rowing").
+
+WHICH WEEK TO READ
+- Read ONLY the most recently completed week: the RIGHTMOST WEEK column that contains handwriting. Report its column number (1-4) in "weekNumber" and any date written above it in "weekDate". Ignore empty/earlier columns.
+
+HOW TO READ EACH SET BOX — this shorthand is critical:
+1. BARE WEIGHT = max reps. If the exercise has a numeric rep target (e.g. "8-10", "10", "12", "15") and the box has ONLY a number with no "R" mark, that number is the WEIGHT in kg and the reps equal the MAXIMUM of the target range (10 for "8-10", 12 for "3×12", 15 for "4×15", 10 for "3×10"). Set inferred=true.
+2. OVERRIDE (reps differ from target). If a box shows reps marked with "R" (e.g. "7R", "12R", "9R") together with a weight (written either order, e.g. "7R 70", "70 7R", "12R 30"), then the R-number is the ACTUAL reps and the other number is the WEIGHT in kg. Set inferred=false. Example: "60 / 7R" → weight 60, reps 7.
+3. NO WEIGHT TARGET (bodyweight). If the target is "Failure"/"AMRAP" (e.g. Ab Roller, Dips, Pull-Ups), the number written in the box IS the rep count achieved; set weight=null.
+4. TIMED. If the target is a duration (e.g. "1 min"), a box like "1m" means it was held for that duration; set reps=null, weight=null, and put the duration in durationSeconds (e.g. 60 for "1m").
+5. Units: a weight may have "kg" written after it — strip it, keep the number. Form remarks like "(form?)" go in the set's "notes", never in a number.
+6. Always copy exactly what was written into "raw". If a value is genuinely unreadable, use null — do NOT guess a number.
+7. Skip blank set boxes.
+
+Return ONLY this JSON object, no markdown fences, no commentary:
 {
-  "title": string | null,            // e.g. "Monday - Chest", or null if none
+  "month": string | null,
+  "day": string | null,
+  "weekNumber": number | null,
+  "weekDate": string | null,
   "exercises": [
     {
-      "name": string,                // exercise name as written
+      "name": string,
+      "target": string | null,
       "sets": [
-        { "reps": number | null, "weight": number | null, "notes": string | null }
+        { "setNumber": number, "reps": number | null, "weight": number | null, "durationSeconds": number | null, "inferred": boolean, "raw": string, "notes": string | null }
       ]
     }
   ],
-  "rawText": string                  // your best plain-text transcription of the whole page
+  "notes": string | null,
+  "rawText": string
 }
-
-Rules:
-- One entry in "sets" per set actually written (e.g. "3x10 @ 60" -> three sets of reps 10, weight 60).
-- Use null for any value you cannot read confidently. Do not invent numbers.
-- "weight" is the number as written; ignore the unit (kg/lb).
-- If the page is unreadable, return {"title": null, "exercises": [], "rawText": "<what you can see>"}.`;
+If the page is unreadable, return the same object with "exercises": [] and your best "rawText".`;
 
 export interface ParsedTracker {
-  title: string | null;
+  month: string | null;
+  day: string | null;
+  weekNumber: number | null;
+  weekDate: string | null;
   exercises: TrackerExercise[];
+  notes: string | null;
   rawText: string;
 }
 
 function extractJson(text: string): string {
-  // Strip ```json fences or surrounding prose, then take the outermost {...}.
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
   const body = fenced ? fenced[1] : text;
   const start = body.indexOf('{');
@@ -46,6 +67,10 @@ function extractJson(text: string): string {
     throw new Error('No JSON object found in the model response.');
   }
   return body.slice(start, end + 1);
+}
+
+function num(v: any): number | null {
+  return typeof v === 'number' && Number.isFinite(v) ? v : null;
 }
 
 export async function parseTrackerImage(
@@ -97,14 +122,23 @@ export async function parseTrackerImage(
 
   const parsed = JSON.parse(extractJson(text));
   return {
-    title: parsed.title ?? null,
+    month: parsed.month ?? null,
+    day: parsed.day ?? null,
+    weekNumber: num(parsed.weekNumber),
+    weekDate: parsed.weekDate ?? null,
+    notes: parsed.notes ?? null,
     exercises: Array.isArray(parsed.exercises)
       ? parsed.exercises.map((e: any) => ({
           name: String(e?.name ?? 'Unknown'),
+          target: e?.target ?? undefined,
           sets: Array.isArray(e?.sets)
-            ? e.sets.map((s: any) => ({
-                reps: typeof s?.reps === 'number' ? s.reps : null,
-                weight: typeof s?.weight === 'number' ? s.weight : null,
+            ? e.sets.map((s: any, i: number) => ({
+                setNumber: num(s?.setNumber) ?? i + 1,
+                reps: num(s?.reps),
+                weight: num(s?.weight),
+                durationSeconds: num(s?.durationSeconds),
+                inferred: s?.inferred === true,
+                raw: typeof s?.raw === 'string' ? s.raw : undefined,
                 notes: s?.notes ?? undefined,
               }))
             : [],

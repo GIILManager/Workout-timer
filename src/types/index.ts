@@ -63,23 +63,33 @@ export interface UserSettings {
 // ── Workout tracker (handwritten-page photo logging) ──────────────────────
 
 export interface TrackerSet {
-  reps: number | null;
-  weight: number | null; // in the unit the user wrote (kg/lb); not normalised
+  setNumber: number;        // 1-based (S1, S2, …)
+  reps: number | null;      // actual reps performed
+  weight: number | null;    // kg as written (unit stripped); null for bodyweight/timed
+  durationSeconds?: number | null; // for timed holds (e.g. plank "1m")
+  inferred?: boolean;       // true when reps were inferred from the target (bare-weight rule)
+  raw?: string;             // exactly what was written in the box
   notes?: string;
 }
 
 export interface TrackerExercise {
   name: string;
+  target?: string;          // the "Sets × Reps" target, e.g. "4×8-10", "3×Failure"
   sets: TrackerSet[];
 }
 
 export interface TrackerEntry {
   id: string;
-  capturedAt: string; // ISO
-  weekKey: string;    // e.g. "2026-W27"
-  title?: string;     // e.g. "Monday — Chest" if legible
+  capturedAt: string;       // ISO
+  weekKey: string;          // ISO week the photo was taken, e.g. "2026-W27"
+  month?: string;           // month printed/written on the page, e.g. "July"
+  day?: string;             // day heading, e.g. "Monday — Chest, Biceps & Abs"
+  weekNumber?: number | null;   // which WEEK column (1-4) was read
+  weekDate?: string;        // date written above that column, e.g. "25th"
+  title?: string;           // short label for the entry
   exercises: TrackerExercise[];
-  rawText?: string;   // model's free-text transcription, for reference
+  notes?: string;           // page notes / PRs / form cues
+  rawText?: string;         // model's free-text transcription, for reference
 }
 
 export type TimerPhase = 'set' | 'break' | 'amrap' | 'timed' | 'transition' | 'idle';

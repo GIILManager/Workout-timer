@@ -1,6 +1,4 @@
 import { router } from 'expo-router';
-import * as Crypto from 'expo-crypto';
-import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import React, { useMemo, useState } from 'react';
@@ -15,18 +13,51 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTrackerStore, currentWeekKey } from '../src/store/trackerStore';
-import { parseTrackerImage } from '../src/utils/claudeClient';
+import { runTrackerCapture, CaptureResult } from '../src/utils/trackerCapture';
 import { buildWeekCsv } from '../src/utils/csv';
-import { TrackerEntry } from '../src/types';
+import { TrackerEntry, TrackerSet } from '../src/types';
+
+/** Map a capture result to a user-facing alert. Returns true if an entry was saved. */
+export function handleCaptureResult(r: CaptureResult): boolean {
+  switch (r.status) {
+    case 'saved':
+      return true;
+    case 'no-key':
+      Alert.alert('API key needed', 'Add your Anthropic API key in Settings → Tracker & API to parse photos.', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Open Settings', onPress: () => router.push('/settings') },
+      ]);
+      return false;
+    case 'no-permission':
+      Alert.alert('Camera permission', 'Camera access is needed to photograph your tracker page.');
+      return false;
+    case 'empty':
+      Alert.alert('Couldn’t read the page', 'No exercises were detected. Try a clearer, well-lit, straight-on photo.');
+      return false;
+    case 'error':
+      Alert.alert('Parsing failed', r.message);
+      return false;
+    case 'cancelled':
+    default:
+      return false;
+  }
+}
+
+function describeSet(s: TrackerSet): string {
+  if (s.durationSeconds) return `${Math.round(s.durationSeconds / 60)}m`;
+  const reps = s.reps ?? '–';
+  const w = s.weight != null ? ` @ ${s.weight}` : '';
+  const flag = s.inferred ? '*' : '';
+  return `${reps}${flag}${w}`;
+}
 
 export default function TrackerScreen() {
   const entries = useTrackerStore((s) => s.entries);
   const apiKey = useTrackerStore((s) => s.apiKey);
-  const addEntry = useTrackerStore((s) => s.addEntry);
   const deleteEntry = useTrackerStore((s) => s.deleteEntry);
   const clearWeeksBefore = useTrackerStore((s) => s.clearWeeksBefore);
 
-  const [busy, setBusy] = useState<null | 'capturing' | 'parsing'>(null);
+  const [busy, setBusy] = useState<null | 'capturing'>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const week = currentWeekKey();
@@ -50,55 +81,15 @@ export default function TrackerScreen() {
   }
 
   async function handleCapture() {
-    if (!apiKey) {
-      Alert.alert('API key needed', 'Add your Anthropic API key in Settings to parse photos.', [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Open Settings', onPress: () => router.push('/settings') },
-      ]);
-      return;
-    }
-    const perm = await ImagePicker.requestCameraPermissionsAsync();
-    if (!perm.granted) {
-      Alert.alert('Camera permission', 'Camera access is needed to photograph your tracker page.');
-      return;
-    }
     setBusy('capturing');
     try {
-      const shot = await ImagePicker.launchCameraAsync({
-        base64: true,
-        quality: 0.5,
-        allowsEditing: true,
-      });
-      if (shot.canceled || !shot.assets?.[0]?.base64) {
-        setBusy(null);
-        return;
+      const result = await runTrackerCapture();
+      if (handleCaptureResult(result) && result.status === 'saved') {
+        setExpandedId(result.entry.id);
       }
-      setBusy('parsing');
-      const parsed = await parseTrackerImage(shot.assets[0].base64, apiKey);
-      if (parsed.exercises.length === 0) {
-        Alert.alert('Couldn’t read the page', 'No exercises were detected. Try a clearer, well-lit photo.');
-        setBusy(null);
-        return;
-      }
-      const entry: TrackerEntry = {
-        id: Crypto.randomUUID(),
-        capturedAt: new Date().toISOString(),
-        weekKey: week,
-        title: parsed.title ?? undefined,
-        exercises: parsed.exercises,
-        rawText: parsed.rawText,
-      };
-      await addEntry(entry);
-      setExpandedId(entry.id);
-    } catch (e: any) {
-      Alert.alert('Parsing failed', e?.message ?? 'Something went wrong calling the Claude API.');
     } finally {
       setBusy(null);
     }
-  }
-
-  async function handleExportThisWeek() {
-    await exportCsv(thisWeek, week);
   }
 
   function handleExportOlder() {
@@ -140,7 +131,7 @@ export default function TrackerScreen() {
           <TouchableOpacity style={styles.warnCard} onPress={() => router.push('/settings')} activeOpacity={0.8}>
             <Text style={styles.warnTitle}>Add your Anthropic API key</Text>
             <Text style={styles.warnBody}>
-              Photo parsing uses the Claude API. Add your key in Settings → API to enable capture.
+              Photo parsing uses the Claude API. Add your key in Settings → Tracker & API to enable capture.
             </Text>
           </TouchableOpacity>
         )}
@@ -163,6 +154,9 @@ export default function TrackerScreen() {
         {thisWeek.map((entry) => {
           const expanded = expandedId === entry.id;
           const setCount = entry.exercises.reduce((n, e) => n + e.sets.length, 0);
+          const sub = [entry.weekNumber ? `Week ${entry.weekNumber}` : null, entry.weekDate]
+            .filter(Boolean)
+            .join(' · ');
           return (
             <View key={entry.id} style={styles.card}>
               <TouchableOpacity
@@ -173,7 +167,7 @@ export default function TrackerScreen() {
                 <View style={{ flex: 1 }}>
                   <Text style={styles.cardTitle}>{entry.title || 'Workout page'}</Text>
                   <Text style={styles.cardMeta}>
-                    {entry.capturedAt.slice(0, 10)} · {entry.exercises.length} exercises · {setCount} sets
+                    {entry.capturedAt.slice(0, 10)}{sub ? ` · ${sub}` : ''} · {entry.exercises.length} exercises · {setCount} sets
                   </Text>
                 </View>
                 <Text style={styles.chevron}>{expanded ? '▾' : '▸'}</Text>
@@ -183,14 +177,15 @@ export default function TrackerScreen() {
                 <View style={styles.cardBody}>
                   {entry.exercises.map((ex, i) => (
                     <View key={i} style={styles.exRow}>
-                      <Text style={styles.exName}>{ex.name}</Text>
-                      <Text style={styles.exSets}>
-                        {ex.sets
-                          .map((s) => `${s.reps ?? '–'}${s.weight != null ? ` @ ${s.weight}` : ''}`)
-                          .join('   ')}
+                      <Text style={styles.exName}>
+                        {ex.name}
+                        {ex.target ? <Text style={styles.exTarget}>  ({ex.target})</Text> : null}
                       </Text>
+                      <Text style={styles.exSets}>{ex.sets.map(describeSet).join('   ')}</Text>
                     </View>
                   ))}
+                  {entry.notes ? <Text style={styles.entryNotes}>Notes: {entry.notes}</Text> : null}
+                  <Text style={styles.legend}>* reps inferred from target (bare weight written)</Text>
                   <TouchableOpacity onPress={() => confirmDelete(entry.id)} style={styles.deleteBtn}>
                     <Text style={styles.deleteText}>Delete entry</Text>
                   </TouchableOpacity>
@@ -201,7 +196,7 @@ export default function TrackerScreen() {
         })}
 
         {thisWeek.length > 0 && (
-          <TouchableOpacity style={styles.exportBtn} onPress={handleExportThisWeek} activeOpacity={0.8}>
+          <TouchableOpacity style={styles.exportBtn} onPress={() => exportCsv(thisWeek, week)} activeOpacity={0.8}>
             <Text style={styles.exportText}>⬇  Export this week (CSV)</Text>
           </TouchableOpacity>
         )}
@@ -217,7 +212,7 @@ export default function TrackerScreen() {
           {busy != null ? (
             <View style={styles.busyRow}>
               <ActivityIndicator color="#000" />
-              <Text style={styles.captureText}>{busy === 'parsing' ? 'Reading page…' : 'Opening camera…'}</Text>
+              <Text style={styles.captureText}>Reading page…</Text>
             </View>
           ) : (
             <Text style={styles.captureText}>📷  Capture page</Text>
@@ -267,7 +262,10 @@ const styles = StyleSheet.create({
   cardBody: { paddingHorizontal: 16, paddingBottom: 12, borderTopWidth: 1, borderTopColor: '#1A1A1A', paddingTop: 8 },
   exRow: { paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#1A1A1A' },
   exName: { fontSize: 14, fontWeight: '500', color: '#F0F0F0' },
+  exTarget: { fontSize: 12, color: '#666', fontWeight: '400' },
   exSets: { fontSize: 13, color: '#888', marginTop: 3, fontVariant: ['tabular-nums'] },
+  entryNotes: { fontSize: 12, color: '#888', marginTop: 10, lineHeight: 18, fontStyle: 'italic' },
+  legend: { fontSize: 11, color: '#555', marginTop: 8 },
   deleteBtn: { paddingTop: 12, alignItems: 'flex-start' },
   deleteText: { fontSize: 13, color: '#EF4444', fontWeight: '600' },
 
