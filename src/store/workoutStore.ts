@@ -19,7 +19,6 @@ interface WorkoutState {
   pausedAt: number | null;
   setRecords: SetRecord[];
   warningDismissed: boolean;
-  pendingSetRecord: Partial<SetRecord> | null;
   pendingAlertId: string | null;
   ongoingId: string | null;
 
@@ -33,7 +32,6 @@ interface WorkoutState {
   resume: () => void;
   addSetRecord: (record: SetRecord) => void;
   patchLastBreak: (actualBreakDuration: number) => void;
-  setPendingSetRecord: (record: Partial<SetRecord>) => void;
   advanceToNextExercise: () => boolean;
   abandonWorkout: () => void;
   dismissWarning: () => void;
@@ -52,7 +50,6 @@ const initialState = {
   pausedAt: null,
   setRecords: [],
   warningDismissed: false,
-  pendingSetRecord: null,
   pendingAlertId: null,
   ongoingId: null,
 };
@@ -238,10 +235,6 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => {
       });
     },
 
-    setPendingSetRecord(record) {
-      set({ pendingSetRecord: record });
-    },
-
     advanceToNextExercise() {
       const { activeWorkout, currentExerciseIndex, pendingAlertId, ongoingId } = get();
       if (!activeWorkout) return false;
@@ -277,11 +270,6 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => {
     },
   };
 });
-
-export function getCurrentExercise(): Exercise | null {
-  const { activeWorkout, currentExerciseIndex } = useWorkoutStore.getState();
-  return activeWorkout?.exercises[currentExerciseIndex] ?? null;
-}
 
 /** The next non-cardio exercise after the current one, or null if it's the last. */
 export function getNextExercise(): Exercise | null {

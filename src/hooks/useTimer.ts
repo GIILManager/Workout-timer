@@ -48,10 +48,11 @@ export function useTimer(
       const remaining = target - elapsed;
       const isOvertime = remaining < 0;
 
-      // Only fire the in-app haptic when the timer is actively running (not paused).
+      // Alert once when the allotted time is up — for the SET phase as well as
+      // BREAK, so you know to pick up the pace. 3 pulses for rest, 2 for a set.
       if (isOvertime && !alertedRef.current && pausedAt == null) {
         alertedRef.current = true;
-        triggerTimerAlert();
+        triggerTimerAlert(phase === 'break' || phase === 'transition' ? 3 : 2);
       }
 
       setState({ elapsed, remaining, isOvertime, hasAlerted: alertedRef.current });
