@@ -60,6 +60,28 @@ export interface UserSettings {
   minSessionsForAdaptation: number;
 }
 
+// ── Workout tracker (handwritten-page photo logging) ──────────────────────
+
+export interface TrackerSet {
+  reps: number | null;
+  weight: number | null; // in the unit the user wrote (kg/lb); not normalised
+  notes?: string;
+}
+
+export interface TrackerExercise {
+  name: string;
+  sets: TrackerSet[];
+}
+
+export interface TrackerEntry {
+  id: string;
+  capturedAt: string; // ISO
+  weekKey: string;    // e.g. "2026-W27"
+  title?: string;     // e.g. "Monday — Chest" if legible
+  exercises: TrackerExercise[];
+  rawText?: string;   // model's free-text transcription, for reference
+}
+
 export type TimerPhase = 'set' | 'break' | 'amrap' | 'timed' | 'transition' | 'idle';
 
 export interface AdaptedTiming {

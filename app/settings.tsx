@@ -1,9 +1,10 @@
 import { router } from 'expo-router';
-import React from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useState } from 'react';
+import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Slider from '@react-native-community/slider';
 import { useHistoryStore } from '../src/store/historyStore';
+import { useTrackerStore } from '../src/store/trackerStore';
 import { UserSettings } from '../src/types';
 
 interface SliderConfig {
@@ -57,6 +58,56 @@ const sc = StyleSheet.create({
   segmentText: { fontSize: 13, color: '#888' },
   segmentTextActive: { color: '#000', fontWeight: '700' },
 });
+
+function ApiKeyField() {
+  const apiKey = useTrackerStore((s) => s.apiKey);
+  const setApiKey = useTrackerStore((s) => s.setApiKey);
+  const [draft, setDraft] = useState(apiKey);
+  const [editing, setEditing] = useState(false);
+
+  const masked = apiKey ? `${apiKey.slice(0, 7)}…${apiKey.slice(-4)}` : 'Not set';
+
+  return (
+    <View style={styles.card}>
+      <Text style={styles.cardLabel}>Anthropic API Key</Text>
+      {editing ? (
+        <>
+          <TextInput
+            style={styles.input}
+            value={draft}
+            onChangeText={setDraft}
+            placeholder="sk-ant-…"
+            placeholderTextColor="#555"
+            autoCapitalize="none"
+            autoCorrect={false}
+            secureTextEntry
+          />
+          <View style={styles.keyBtnRow}>
+            <TouchableOpacity
+              style={[styles.keyBtn, styles.keyBtnPrimary]}
+              onPress={async () => { await setApiKey(draft); setEditing(false); }}
+            >
+              <Text style={styles.keyBtnPrimaryText}>Save</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.keyBtn} onPress={() => { setDraft(apiKey); setEditing(false); }}>
+              <Text style={styles.keyBtnText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </>
+      ) : (
+        <View style={styles.keyRow}>
+          <Text style={styles.keyValue}>{masked}</Text>
+          <TouchableOpacity onPress={() => { setDraft(apiKey); setEditing(true); }}>
+            <Text style={styles.keyEdit}>{apiKey ? 'Change' : 'Add'}</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+      <Text style={styles.hint}>
+        Used only on this device to parse photos of your handwritten tracker via Claude. Stored locally, never shared.
+      </Text>
+    </View>
+  );
+}
 
 export default function SettingsScreen() {
   const { settings, updateSettings, resetLearning } = useHistoryStore();
@@ -132,6 +183,10 @@ export default function SettingsScreen() {
           </View>
         </View>
 
+        <Text style={styles.sectionLabel}>Tracker & API</Text>
+
+        <ApiKeyField />
+
         <Text style={styles.sectionLabel}>Learning</Text>
 
         <View style={styles.card}>
@@ -184,6 +239,20 @@ const styles = StyleSheet.create({
   cardLabel: { fontSize: 15, fontWeight: '500', color: '#F0F0F0' },
   cardValue: { fontSize: 15, fontWeight: '700', color: '#22D46E' },
   hint: { fontSize: 12, lineHeight: 18, color: '#888', marginTop: 10 },
+
+  input: {
+    marginTop: 12, height: 44, borderRadius: 8, paddingHorizontal: 12,
+    backgroundColor: '#1C1C1C', borderWidth: 1, borderColor: '#2A2A2A',
+    color: '#F0F0F0', fontSize: 14,
+  },
+  keyRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 },
+  keyValue: { fontSize: 14, color: '#F0F0F0', fontVariant: ['tabular-nums'] },
+  keyEdit: { fontSize: 14, fontWeight: '700', color: '#22D46E' },
+  keyBtnRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
+  keyBtn: { flex: 1, height: 40, borderRadius: 8, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#2A2A2A' },
+  keyBtnPrimary: { backgroundColor: '#22D46E', borderColor: '#22D46E' },
+  keyBtnPrimaryText: { color: '#000', fontWeight: '800', fontSize: 14 },
+  keyBtnText: { color: '#888', fontWeight: '600', fontSize: 14 },
 
   destructiveCard: {
     backgroundColor: '#111', borderWidth: 1, borderColor: '#2A2A2A', borderRadius: 12,
