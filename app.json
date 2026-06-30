@@ -15,7 +15,7 @@
     },
     "android": {
       "package": "com.briangitau.workouttimer",
-      "permissions": ["VIBRATE", "WAKE_LOCK"],
+      "permissions": ["VIBRATE", "WAKE_LOCK", "POST_NOTIFICATIONS", "SCHEDULE_EXACT_ALARM"],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0A0A0A"
@@ -27,6 +27,12 @@
         "expo-av",
         {
           "microphonePermission": false
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "color": "#22D46E"
         }
       ]
     ],
