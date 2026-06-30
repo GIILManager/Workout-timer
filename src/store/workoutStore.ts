@@ -23,7 +23,7 @@ interface WorkoutState {
   pendingAlertId: string | null;
   ongoingId: string | null;
 
-  startWorkout: (workout: WorkoutDay, sessionId: string) => void;
+  startWorkout: (workout: WorkoutDay, sessionId: string, startIndex?: number) => void;
   startSet: (targetDuration: number | null) => void;
   startBreak: (targetDuration: number) => void;
   startTransition: (targetDuration: number) => void;
@@ -143,14 +143,21 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => {
   return {
     ...initialState,
 
-    startWorkout(workout, sessionId) {
+    startWorkout(workout, sessionId, startIndex = 0) {
       cancelAlert(get().pendingAlertId);
       dismissOngoing(get().ongoingId);
+      // Resolve the first non-cardio exercise at or after the requested index.
+      let idx = Math.max(0, Math.min(startIndex, workout.exercises.length - 1));
+      while (idx < workout.exercises.length && workout.exercises[idx].type === 'CARDIO') {
+        idx++;
+      }
+      if (idx >= workout.exercises.length) idx = 0;
       set({
         ...initialState,
         activeWorkout: workout,
         sessionId,
         sessionStartedAt: Date.now(),
+        currentExerciseIndex: idx,
       });
     },
 
