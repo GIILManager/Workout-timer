@@ -32,9 +32,9 @@ function GearIcon() {
   );
 }
 
-function ExerciseRow({ ex }: { ex: Exercise }) {
+function ExerciseRow({ ex, onPress }: { ex: Exercise; onPress: () => void }) {
   return (
-    <View style={styles.exerciseRow}>
+    <TouchableOpacity style={styles.exerciseRow} onPress={onPress} activeOpacity={0.6}>
       {ex.type === 'TIER1' && (
         <View style={styles.t1Badge}>
           <Text style={styles.t1Text}>T1</Text>
@@ -53,7 +53,7 @@ function ExerciseRow({ ex }: { ex: Exercise }) {
         <Text style={styles.exerciseReps}>{ex.sets} × {ex.reps}</Text>
       </View>
       <Text style={styles.chevron}>›</Text>
-    </View>
+    </TouchableOpacity>
   );
 }
 
@@ -66,11 +66,14 @@ export default function HomeScreen() {
   const today = getTodayWorkout();
   const nextWorkout = getNextWorkout();
 
-  function handleStartWorkout(workout: WorkoutDay | null = today) {
+  function handleStartWorkout(workout: WorkoutDay | null = today, startIndex = 0) {
     if (!workout) return;
     const sessionId = Crypto.randomUUID();
-    startWorkout(workout, sessionId);
-    const firstEx = workout.exercises.find((e) => e.type !== 'CARDIO');
+    startWorkout(workout, sessionId, startIndex);
+    // The store resolves the actual starting index (skipping any cardio);
+    // read it back so the first set's timing matches the exercise we land on.
+    const resolvedIdx = useWorkoutStore.getState().currentExerciseIndex;
+    const firstEx = workout.exercises[resolvedIdx];
     if (firstEx) {
       const timing = getAdaptedTiming(firstEx.id, firstEx.type, timingRecords, settings);
       startSet(timing.setDuration);
@@ -163,9 +166,11 @@ export default function HomeScreen() {
 
       <Text style={styles.sectionLabel}>Today's Programme</Text>
 
+      <Text style={styles.tapHint}>Tap an exercise to start from there</Text>
+
       <ScrollView style={styles.exerciseList} contentContainerStyle={{ paddingBottom: 120 }}>
-        {today.exercises.map((ex) => (
-          <ExerciseRow key={ex.id} ex={ex} />
+        {today.exercises.map((ex, i) => (
+          <ExerciseRow key={ex.id} ex={ex} onPress={() => handleStartWorkout(today, i)} />
         ))}
       </ScrollView>
 
@@ -204,7 +209,10 @@ const styles = StyleSheet.create({
 
   sectionLabel: {
     fontSize: 11, fontWeight: '600', color: '#888', textTransform: 'uppercase',
-    letterSpacing: 1.5, paddingHorizontal: 24, marginBottom: 8,
+    letterSpacing: 1.5, paddingHorizontal: 24, marginBottom: 4,
+  },
+  tapHint: {
+    fontSize: 12, color: '#555', paddingHorizontal: 24, marginBottom: 8,
   },
   exerciseList: { flex: 1 },
   exerciseRow: {
