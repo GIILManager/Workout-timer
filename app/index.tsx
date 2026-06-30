@@ -32,6 +32,14 @@ function GearIcon() {
   );
 }
 
+function TrackerIcon() {
+  return (
+    <View style={styles.iconBtn}>
+      <Text style={styles.iconText}>📷</Text>
+    </View>
+  );
+}
+
 function ExerciseRow({ ex, onPress }: { ex: Exercise; onPress: () => void }) {
   return (
     <TouchableOpacity style={styles.exerciseRow} onPress={onPress} activeOpacity={0.6}>
@@ -152,6 +160,7 @@ export default function HomeScreen() {
         <View style={styles.header}>
           <Text style={styles.appTitle}>WORKOUT TIMER</Text>
           <View style={styles.headerIcons}>
+            <TouchableOpacity onPress={() => router.push('/tracker')}><TrackerIcon /></TouchableOpacity>
             <TouchableOpacity onPress={() => router.push('/history')}><ClockIcon /></TouchableOpacity>
             <TouchableOpacity onPress={() => router.push('/settings')}><GearIcon /></TouchableOpacity>
           </View>

@@ -15,7 +15,7 @@
     },
     "android": {
       "package": "com.briangitau.workouttimer",
-      "permissions": ["VIBRATE", "WAKE_LOCK", "POST_NOTIFICATIONS", "SCHEDULE_EXACT_ALARM"],
+      "permissions": ["VIBRATE", "WAKE_LOCK", "POST_NOTIFICATIONS", "SCHEDULE_EXACT_ALARM", "CAMERA"],
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0A0A0A"
@@ -33,6 +33,12 @@
         "expo-notifications",
         {
           "color": "#22D46E"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Allow $(PRODUCT_NAME) to photograph your handwritten workout tracker page."
         }
       ]
     ],
