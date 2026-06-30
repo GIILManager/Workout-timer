@@ -1,13 +1,27 @@
 import { router } from 'expo-router';
-import React from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useState } from 'react';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useHistoryStore } from '../src/store/historyStore';
 import { formatHoursMinutes } from '../src/utils/time';
+import { runTrackerCapture } from '../src/utils/trackerCapture';
+import { handleCaptureResult } from './tracker';
 
 export default function CompleteScreen() {
   const sessions = useHistoryStore((s) => s.sessions);
   const latest = sessions[0] ?? null;
+  const [capturing, setCapturing] = useState(false);
+
+  async function capturePage() {
+    setCapturing(true);
+    try {
+      const result = await runTrackerCapture();
+      const saved = handleCaptureResult(result);
+      if (saved) router.replace('/tracker');
+    } finally {
+      setCapturing(false);
+    }
+  }
 
   if (!latest) {
     return (
@@ -64,11 +78,27 @@ export default function CompleteScreen() {
 
       <View style={styles.ctaContainer}>
         <TouchableOpacity
-          style={styles.doneBtn}
-          onPress={() => router.replace('/')}
+          style={[styles.doneBtn, capturing && styles.btnBusy]}
+          onPress={capturePage}
+          disabled={capturing}
           activeOpacity={0.85}
         >
-          <Text style={styles.doneBtnText}>DONE</Text>
+          {capturing ? (
+            <View style={styles.busyRow}>
+              <ActivityIndicator color="#000" />
+              <Text style={styles.doneBtnText}>Reading page…</Text>
+            </View>
+          ) : (
+            <Text style={styles.doneBtnText}>📷  Log tracker page</Text>
+          )}
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.secondaryBtn}
+          onPress={() => router.replace('/')}
+          activeOpacity={0.7}
+          disabled={capturing}
+        >
+          <Text style={styles.secondaryText}>Skip — back to home</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -107,11 +137,15 @@ const styles = StyleSheet.create({
 
   ctaContainer: {
     position: 'absolute', left: 0, right: 0, bottom: 0,
-    padding: 16, paddingBottom: 32,
+    padding: 16, paddingBottom: 32, gap: 10,
   },
   doneBtn: {
     height: 64, borderRadius: 16, backgroundColor: '#22D46E',
     alignItems: 'center', justifyContent: 'center',
   },
   doneBtnText: { color: '#000', fontSize: 17, fontWeight: '800' },
+  btnBusy: { opacity: 0.85 },
+  busyRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  secondaryBtn: { height: 48, alignItems: 'center', justifyContent: 'center' },
+  secondaryText: { color: '#888', fontSize: 15, fontWeight: '600' },
 });

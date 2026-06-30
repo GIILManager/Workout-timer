@@ -94,7 +94,14 @@ jobs:
 
       - name: Decode keystore
         run: |
-          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > android/app/workout-timer.keystore
+          # Strip whitespace/newlines first so a base64 secret created with
+          # line-wrapping (e.g. `base64 -i` on macOS) still decodes to a valid
+          # keystore instead of "Tag number over 30 is not supported".
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | tr -d '[:space:]' | base64 --decode > android/app/workout-timer.keystore
+          # Fail early with a clear message if the result isn't a valid keystore.
+          keytool -list -keystore android/app/workout-timer.keystore \
+            -storepass "${{ secrets.ANDROID_STORE_PASSWORD }}" >/dev/null \
+            || { echo "::error::Decoded keystore is invalid. Re-create ANDROID_KEYSTORE_BASE64 with: base64 -w0 workout-timer.keystore (no line wrapping)."; exit 1; }
 
       - name: Wire signing config into build.gradle
         run: |
