@@ -16,13 +16,14 @@ const SIZE = 280;
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
 interface Props {
-  phase: 'set' | 'break' | 'amrap' | 'timed' | 'idle';
+  phase: 'set' | 'break' | 'amrap' | 'timed' | 'transition' | 'idle';
   isOvertime: boolean;
   progress: number;
 }
 
 function getStrokeColor(phase: Props['phase'], isOvertime: boolean): string {
   if (phase === 'break') return isOvertime ? '#EF4444' : '#3B82F6';
+  if (phase === 'transition') return isOvertime ? '#EF4444' : '#F59E0B';
   return '#22D46E';
 }
 

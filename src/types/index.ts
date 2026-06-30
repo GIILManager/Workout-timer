@@ -20,9 +20,12 @@ export interface TimingRecord {
   exerciseId: string;
   setNumber: number;
   setDuration: number | null;
-  breakDuration: number;
+  breakDuration: number | null;
   date: string;
   sessionId: string;
+  /** True for between-exercise transition (setup/bathroom) records.
+   *  exerciseId on these is the UPCOMING exercise being set up for. */
+  transition?: boolean;
 }
 
 export interface SetRecord {
@@ -51,12 +54,13 @@ export interface UserSettings {
   tier1BreakDuration: number;
   standardSetDuration: number;
   standardBreakDuration: number;
+  transitionDuration: number;
   targetWorkoutMinutes: number;
   warningWorkoutMinutes: number;
   minSessionsForAdaptation: number;
 }
 
-export type TimerPhase = 'set' | 'break' | 'amrap' | 'timed' | 'idle';
+export type TimerPhase = 'set' | 'break' | 'amrap' | 'timed' | 'transition' | 'idle';
 
 export interface AdaptedTiming {
   setDuration: number | null;
