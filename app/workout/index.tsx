@@ -12,15 +12,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { CircularTimer } from '../../src/components/CircularTimer';
 import { SetDots } from '../../src/components/SetDots';
 import { useHistoryStore } from '../../src/store/historyStore';
-import { useWorkoutStore } from '../../src/store/workoutStore';
+import { useWorkoutStore, getNextExercise } from '../../src/store/workoutStore';
 import { useTimer } from '../../src/hooks/useTimer';
 import { useWorkoutDuration } from '../../src/hooks/useWorkoutDuration';
-import { getAdaptedTiming } from '../../src/utils/timing';
+import { getAdaptedTiming, getAdaptedTransition } from '../../src/utils/timing';
 import { formatTime, formatElapsed } from '../../src/utils/time';
 import { stopAlert } from '../../src/utils/alertService';
 import { SetRecord, TimingRecord } from '../../src/types';
-
-const CIRCUMFERENCE = 2 * Math.PI * 128;
 
 export default function WorkoutScreen() {
   useKeepAwake();
@@ -39,7 +37,7 @@ export default function WorkoutScreen() {
     currentPhase,
     phaseStartedAt,
     targetDuration,
-    setRecords,
+    pausedAt,
     warningDismissed,
   } = store;
 
@@ -47,6 +45,7 @@ export default function WorkoutScreen() {
     currentPhase as any,
     targetDuration,
     phaseStartedAt,
+    pausedAt,
   );
 
   const duration = useWorkoutDuration(
@@ -57,70 +56,19 @@ export default function WorkoutScreen() {
   );
 
   const exercise = activeWorkout?.exercises[currentExerciseIndex] ?? null;
+  const isPaused = pausedAt != null;
+  const isBreak = currentPhase === 'break';
+  const isTransition = currentPhase === 'transition';
+  const isAmrap = currentPhase === 'amrap';
+  const isCountdown = isBreak || isTransition; // counts DOWN
 
   const progress = (() => {
-    if (!targetDuration || currentPhase === 'amrap') return 0;
-    if (currentPhase === 'break') return Math.max(0, remaining / targetDuration);
+    if (!targetDuration || isAmrap) return 0;
+    if (isCountdown) return Math.max(0, remaining / targetDuration);
     return Math.min(1, elapsed / targetDuration);
   })();
 
-  const handleCompleteSet = useCallback(() => {
-    if (!exercise || !sessionId || !phaseStartedAt) return;
-    stopAlert();
-
-    const actualSetDuration = currentPhase === 'amrap' ? null : (Date.now() - phaseStartedAt) / 1000;
-    const timing = getAdaptedTiming(exercise.id, exercise.type, timingRecords, settings);
-
-    const setRecord: SetRecord = {
-      exerciseId: exercise.id,
-      exerciseName: exercise.name,
-      setNumber: currentSetNumber,
-      predictedSetDuration: timing.setDuration,
-      actualSetDuration,
-      predictedBreakDuration: timing.breakDuration,
-      actualBreakDuration: 0,
-      completedAt: new Date().toISOString(),
-    };
-    store.addSetRecord(setRecord);
-    store.setPendingSetRecord(setRecord);
-    store.startBreak(timing.breakDuration);
-  }, [exercise, sessionId, phaseStartedAt, currentPhase, currentSetNumber, timingRecords, settings]);
-
-  const handleStartNextSet = useCallback(async () => {
-    if (!exercise || !sessionId || !phaseStartedAt) return;
-    stopAlert();
-
-    const actualBreakDuration = (Date.now() - phaseStartedAt) / 1000;
-
-    const timingRecord: TimingRecord = {
-      exerciseId: exercise.id,
-      setNumber: currentSetNumber,
-      setDuration: store.pendingSetRecord?.actualSetDuration ?? null,
-      breakDuration: actualBreakDuration,
-      date: new Date().toISOString(),
-      sessionId,
-    };
-    await addTimingRecord(timingRecord);
-
-    const moreSetsSameExercise = currentSetNumber < exercise.sets;
-    if (moreSetsSameExercise) {
-      store.completeBreak(actualBreakDuration);
-      const timing = getAdaptedTiming(exercise.id, exercise.type, timingRecords, settings);
-      store.startSet(timing.setDuration);
-    } else {
-      const hasMore = store.advanceToNextExercise();
-      if (hasMore) {
-        const freshIdx = useWorkoutStore.getState().currentExerciseIndex;
-        const nextEx = activeWorkout!.exercises[freshIdx];
-        const timing = getAdaptedTiming(nextEx.id, nextEx.type, timingRecords, settings);
-        store.startSet(timing.setDuration);
-      } else {
-        await finishSession(actualBreakDuration);
-      }
-    }
-  }, [exercise, sessionId, phaseStartedAt, currentSetNumber, timingRecords, settings, activeWorkout]);
-
-  const finishSession = async (_lastBreak: number) => {
+  const finishSession = useCallback(async () => {
     const freshState = useWorkoutStore.getState();
     const { sessionId: sid, sessionStartedAt: startedAt, activeWorkout: workout, setRecords: records } = freshState;
     if (!sid || !startedAt || !workout) return;
@@ -136,28 +84,117 @@ export default function WorkoutScreen() {
     });
     store.reset();
     router.replace('/complete');
-  };
+  }, [saveSession]);
 
-  const handleSkipBreak = useCallback(() => {
+  // SET / AMRAP / TIMED finished → record the set, then break, transition, or finish.
+  const handleCompleteSet = useCallback(async () => {
+    if (!exercise || !sessionId || !phaseStartedAt) return;
     stopAlert();
-    store.skipBreak();
-    if (!exercise) return;
-    const moreSetsSameExercise = currentSetNumber < exercise.sets;
-    if (moreSetsSameExercise) {
-      const timing = getAdaptedTiming(exercise.id, exercise.type, timingRecords, settings);
+
+    const actualSetDuration = isAmrap ? null : (Date.now() - phaseStartedAt) / 1000;
+    const timing = getAdaptedTiming(exercise.id, exercise.type, timingRecords, settings);
+
+    const setRecord: SetRecord = {
+      exerciseId: exercise.id,
+      exerciseName: exercise.name,
+      setNumber: currentSetNumber,
+      predictedSetDuration: timing.setDuration,
+      actualSetDuration,
+      predictedBreakDuration: timing.breakDuration,
+      actualBreakDuration: 0,
+      completedAt: new Date().toISOString(),
+    };
+    store.addSetRecord(setRecord);
+
+    // Learn the set duration now (break/transition is recorded when it ends).
+    await addTimingRecord({
+      exerciseId: exercise.id,
+      setNumber: currentSetNumber,
+      setDuration: actualSetDuration,
+      breakDuration: null,
+      date: new Date().toISOString(),
+      sessionId,
+    });
+
+    const isLastSet = currentSetNumber >= exercise.sets;
+    if (!isLastSet) {
+      store.startBreak(timing.breakDuration);
+      return;
+    }
+    const next = getNextExercise();
+    if (next) {
+      store.startTransition(getAdaptedTransition(next.id, timingRecords, settings));
+    } else {
+      await finishSession();
+    }
+  }, [exercise, sessionId, phaseStartedAt, isAmrap, currentSetNumber, timingRecords, settings, finishSession]);
+
+  // BREAK finished (always within the same exercise now) → next set.
+  const handleStartNextSet = useCallback(async () => {
+    if (!exercise || !sessionId || !phaseStartedAt) return;
+    stopAlert();
+    const actualBreakDuration = (Date.now() - phaseStartedAt) / 1000;
+    store.patchLastBreak(actualBreakDuration);
+
+    const timingRecord: TimingRecord = {
+      exerciseId: exercise.id,
+      setNumber: currentSetNumber,
+      setDuration: null,
+      breakDuration: actualBreakDuration,
+      date: new Date().toISOString(),
+      sessionId,
+    };
+    await addTimingRecord(timingRecord);
+
+    store.completeBreak(actualBreakDuration);
+    const timing = getAdaptedTiming(exercise.id, exercise.type, timingRecords, settings);
+    store.startSet(timing.setDuration);
+  }, [exercise, sessionId, phaseStartedAt, currentSetNumber, timingRecords, settings]);
+
+  // SKIP BREAK → record the actual (short) break for history, but don't feed it
+  // into learning (a deliberate skip isn't representative of needed rest).
+  const handleSkipBreak = useCallback(() => {
+    if (!exercise || !phaseStartedAt) return;
+    stopAlert();
+    const actualBreakDuration = (Date.now() - phaseStartedAt) / 1000;
+    store.patchLastBreak(actualBreakDuration);
+    store.completeBreak(actualBreakDuration);
+    const timing = getAdaptedTiming(exercise.id, exercise.type, timingRecords, settings);
+    store.startSet(timing.setDuration);
+  }, [exercise, phaseStartedAt, timingRecords, settings]);
+
+  // TRANSITION finished → learn the setup time, advance to next exercise.
+  const handleContinueToNext = useCallback(async (record: boolean) => {
+    if (!sessionId || !phaseStartedAt) return;
+    stopAlert();
+    const actualTransition = (Date.now() - phaseStartedAt) / 1000;
+    const next = getNextExercise();
+    if (record && next) {
+      await addTimingRecord({
+        exerciseId: next.id,
+        setNumber: 0,
+        setDuration: null,
+        breakDuration: actualTransition,
+        date: new Date().toISOString(),
+        sessionId,
+        transition: true,
+      });
+    }
+    const hasMore = store.advanceToNextExercise();
+    if (hasMore) {
+      const freshIdx = useWorkoutStore.getState().currentExerciseIndex;
+      const nextEx = activeWorkout!.exercises[freshIdx];
+      const timing = getAdaptedTiming(nextEx.id, nextEx.type, timingRecords, settings);
       store.startSet(timing.setDuration);
     } else {
-      const hasMore = store.advanceToNextExercise();
-      if (hasMore) {
-        const freshIdx = useWorkoutStore.getState().currentExerciseIndex;
-        const nextEx = activeWorkout!.exercises[freshIdx];
-        const timing = getAdaptedTiming(nextEx.id, nextEx.type, timingRecords, settings);
-        store.startSet(timing.setDuration);
-      } else {
-        finishSession(0);
-      }
+      await finishSession();
     }
-  }, [exercise, currentSetNumber, timingRecords, settings, activeWorkout]);
+  }, [sessionId, phaseStartedAt, timingRecords, settings, activeWorkout, finishSession]);
+
+  const handleTogglePause = useCallback(() => {
+    if (isPaused) store.resume();
+    else store.pause();
+  }, [isPaused]);
 
   const handleAbandon = useCallback(() => {
     Alert.alert('Abandon Workout?', 'Your progress will not be saved.', [
@@ -182,25 +219,26 @@ export default function WorkoutScreen() {
 
   if (!exercise || !activeWorkout) return null;
 
-  const isBreak = currentPhase === 'break';
-  const isAmrap = currentPhase === 'amrap';
+  const nextEx = getNextExercise();
 
   const timerLabel = (() => {
-    if (isBreak && isOvertime) return `+${formatTime(-remaining)}`;
-    if (isBreak) return formatTime(remaining);
+    if (isCountdown && isOvertime) return `+${formatTime(-remaining)}`;
+    if (isCountdown) return formatTime(remaining);
     if (isAmrap) return elapsed < 1 ? 'GO' : formatTime(elapsed);
     return formatTime(elapsed);
   })();
 
   const subLabel = (() => {
-    if (isBreak && isOvertime) return 'Overtime';
+    if (isPaused) return 'Paused';
+    if (isCountdown && isOvertime) return 'Overtime';
+    if (isTransition) return 'Setup';
     if (isBreak) return 'Remaining';
     if (isAmrap) return 'to failure';
     return 'Elapsed';
   })();
 
   const timerColor = (() => {
-    if (isBreak && isOvertime) return '#EF4444';
+    if (isCountdown && isOvertime) return '#EF4444';
     if (isAmrap) return '#22D46E';
     return '#F0F0F0';
   })();
@@ -210,6 +248,12 @@ export default function WorkoutScreen() {
   const setProgressLabel = (() => {
     const repsLabel = exercise.type === 'AMRAP' ? 'to failure' : exercise.reps;
     return `SET ${currentSetNumber} OF ${exercise.sets}  ·  ${repsLabel}`;
+  })();
+
+  const midLabel = (() => {
+    if (isTransition) return nextEx ? `NEXT  ·  ${nextEx.name}` : 'SETUP';
+    if (isBreak) return `BREAK  ·  SET ${currentSetNumber + 1} NEXT`;
+    return setProgressLabel;
   })();
 
   return (
@@ -222,6 +266,9 @@ export default function WorkoutScreen() {
         <Text style={[styles.elapsed, { color: elapsedColor }]}>
           {formatElapsed(duration.elapsedSeconds)}
         </Text>
+        <TouchableOpacity style={styles.headerBtn} onPress={handleTogglePause}>
+          <Text style={styles.pauseIcon}>{isPaused ? '▶' : '⏸'}</Text>
+        </TouchableOpacity>
         <View style={styles.progressArea}>
           <View style={styles.progressTrack}>
             <View style={[styles.progressFill, { width: progressBarWidth as any }]} />
@@ -241,8 +288,12 @@ export default function WorkoutScreen() {
             <View style={styles.amrapBadge}><Text style={styles.amrapText}>AMRAP</Text></View>
           )}
         </View>
-        <Text style={[styles.setProgress, isBreak ? styles.setProgressBreak : {}]}>
-          {isBreak ? `BREAK  ·  SET ${currentSetNumber + 1} NEXT` : setProgressLabel}
+        <Text style={[
+          styles.setProgress,
+          isBreak ? styles.setProgressBreak : {},
+          isTransition ? styles.setProgressTransition : {},
+        ]}>
+          {midLabel}
         </Text>
       </View>
 
@@ -255,13 +306,13 @@ export default function WorkoutScreen() {
             progress={progress}
           />
           <View style={styles.timerCenter}>
-            <Text style={[styles.timerText, { color: timerColor }]}>{timerLabel}</Text>
-            <Text style={[styles.timerSubLabel, isBreak && isOvertime ? { color: '#EF4444' } : {}]}>
+            <Text style={[styles.timerText, { color: isPaused ? '#888' : timerColor }]}>{timerLabel}</Text>
+            <Text style={[styles.timerSubLabel, isCountdown && isOvertime ? { color: '#EF4444' } : {}]}>
               {subLabel}
             </Text>
           </View>
         </View>
-        {targetDuration && (
+        {targetDuration && !isAmrap && (
           <Text style={styles.targetDuration}>
             target: <Text style={{ color: '#F0F0F0' }}>{formatTime(targetDuration)}</Text>
           </Text>
@@ -280,7 +331,24 @@ export default function WorkoutScreen() {
 
       {/* CTAs */}
       <View style={styles.ctaBlock}>
-        {isBreak ? (
+        {isTransition ? (
+          <>
+            <TouchableOpacity
+              style={styles.transitionBtn}
+              onPress={() => handleContinueToNext(true)}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.transitionBtnText}>▶  START NEXT EXERCISE</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.skipBreakBtn}
+              onPress={() => handleContinueToNext(false)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.skipBreakText}>SKIP SETUP</Text>
+            </TouchableOpacity>
+          </>
+        ) : isBreak ? (
           <>
             <TouchableOpacity
               style={styles.nextSetBtn}
@@ -338,11 +406,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row', alignItems: 'center',
     paddingHorizontal: 16, paddingTop: 8,
   },
-  headerBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', marginLeft: -10 },
+  headerBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   closeIcon: { fontSize: 20, color: '#888' },
+  pauseIcon: { fontSize: 18, color: '#888' },
   elapsed: { flex: 1, textAlign: 'center', fontSize: 17, fontWeight: '700', fontVariant: ['tabular-nums'] },
-  progressArea: { alignItems: 'flex-end', gap: 4 },
-  progressTrack: { width: 80, height: 4, borderRadius: 2, backgroundColor: '#1C1C1C', overflow: 'hidden' },
+  progressArea: { alignItems: 'flex-end', gap: 4, marginLeft: 8 },
+  progressTrack: { width: 64, height: 4, borderRadius: 2, backgroundColor: '#1C1C1C', overflow: 'hidden' },
   progressFill: { height: '100%', backgroundColor: '#22D46E', borderRadius: 2 },
   targetLabel: { fontSize: 10, color: '#888' },
 
@@ -355,6 +424,7 @@ const styles = StyleSheet.create({
   amrapText: { color: '#3B82F6', fontSize: 10, fontWeight: '800' },
   setProgress: { fontSize: 14, fontWeight: '500', color: '#888', marginTop: 6 },
   setProgressBreak: { color: '#3B82F6' },
+  setProgressTransition: { color: '#F59E0B' },
 
   timerContainer: { alignItems: 'center', paddingTop: 24, paddingBottom: 8 },
   timerRing: { width: 280, height: 280, position: 'relative', alignItems: 'center', justifyContent: 'center' },
@@ -383,6 +453,11 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   nextSetText: { color: '#fff', fontSize: 17, fontWeight: '800' },
+  transitionBtn: {
+    height: 64, borderRadius: 16, backgroundColor: '#F59E0B',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  transitionBtnText: { color: '#000', fontSize: 17, fontWeight: '800' },
   skipBreakBtn: {
     height: 48, borderRadius: 12, borderWidth: 1.5, borderColor: '#262626',
     alignItems: 'center', justifyContent: 'center',

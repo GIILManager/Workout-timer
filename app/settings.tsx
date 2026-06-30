@@ -20,6 +20,7 @@ const SLIDER_CONFIGS: SliderConfig[] = [
   { key: 'tier1BreakDuration',   label: 'T1 Rest Period',   min: 90,  max: 240, step: 5, format: (v) => `${Math.floor(v/60)}:${(v%60).toString().padStart(2,'0')}` },
   { key: 'standardSetDuration',  label: 'Standard Set',     min: 20,  max: 60,  step: 5, format: (v) => `${v}s` },
   { key: 'standardBreakDuration',label: 'Standard Rest',    min: 60,  max: 150, step: 5, format: (v) => `${Math.floor(v/60)}:${(v%60).toString().padStart(2,'0')}` },
+  { key: 'transitionDuration',   label: 'Exercise Transition', min: 60, max: 300, step: 15, format: (v) => `${Math.floor(v/60)}:${(v%60).toString().padStart(2,'0')}` },
 ];
 
 function SegmentedControl({

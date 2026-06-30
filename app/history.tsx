@@ -1,7 +1,11 @@
 import { router } from 'expo-router';
 import React, { useState } from 'react';
-import { LayoutAnimation, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { LayoutAnimation, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, UIManager, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 import { useHistoryStore } from '../src/store/historyStore';
 import { getWorkoutByDay } from '../src/data/workouts';
 import { formatHoursMinutes, formatDate } from '../src/utils/time';
@@ -16,7 +20,9 @@ function computeExerciseStats(session: WorkoutSession) {
   for (const r of session.setRecords) {
     if (!byEx[r.exerciseId]) byEx[r.exerciseId] = { name: r.exerciseName, setDurations: [], breakDurations: [] };
     if (r.actualSetDuration != null) byEx[r.exerciseId].setDurations.push(r.actualSetDuration);
-    byEx[r.exerciseId].breakDurations.push(r.actualBreakDuration);
+    // Only count real breaks — the last set of each exercise has no between-set
+    // break (it's followed by a transition), recorded as 0.
+    if (r.actualBreakDuration > 0) byEx[r.exerciseId].breakDurations.push(r.actualBreakDuration);
   }
   return Object.values(byEx).map((ex) => {
     const avgSet = ex.setDurations.length
