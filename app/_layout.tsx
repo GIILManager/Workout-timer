@@ -5,12 +5,14 @@ import { StatusBar } from 'expo-status-bar';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useHistoryStore } from '../src/store/historyStore';
+import { setupNotifications } from '../src/utils/notificationService';
 
 export default function RootLayout() {
   const hydrate = useHistoryStore((s) => s.hydrate);
 
   useEffect(() => {
     hydrate();
+    setupNotifications();
   }, []);
 
   return (
