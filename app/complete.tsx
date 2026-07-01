@@ -7,14 +7,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useHistoryStore } from '../src/store/historyStore';
 import { useTrackerStore } from '../src/store/trackerStore';
 import { formatHoursMinutes } from '../src/utils/time';
-import { runTrackerCapture } from '../src/utils/trackerCapture';
-import { handleCaptureResult, promptCaptureSource } from './tracker';
+import { runBodyweightCapture, runTrackerCapture } from '../src/utils/trackerCapture';
+import { handleBodyweightResult, handleCaptureResult, promptCaptureSource } from './tracker';
 
 export default function CompleteScreen() {
   const sessions = useHistoryStore((s) => s.sessions);
   const latest = sessions[0] ?? null;
   const addBodyweight = useTrackerStore((s) => s.addBodyweight);
   const [capturing, setCapturing] = useState(false);
+  const [weighing, setWeighing] = useState(false);
   const [weightDraft, setWeightDraft] = useState('');
   const [weightSaved, setWeightSaved] = useState(false);
 
@@ -42,6 +43,23 @@ export default function CompleteScreen() {
     await addBodyweight(kg);
     setWeightSaved(true);
     setWeightDraft('');
+  }
+
+  function weighByPhoto() {
+    promptCaptureSource(
+      async (source) => {
+        setWeighing(true);
+        try {
+          if (handleBodyweightResult(await runBodyweightCapture(source))) {
+            setWeightSaved(true);
+            setWeightDraft('');
+          }
+        } finally {
+          setWeighing(false);
+        }
+      },
+      { title: 'Log bodyweight', message: 'Photograph your scale now, or pick a photo you already took.' },
+    );
   }
 
   if (!latest) {
@@ -102,22 +120,39 @@ export default function CompleteScreen() {
             {weightSaved ? (
               <Text style={styles.bwSaved}>✓ Bodyweight saved — it'll be in this week's CSV.</Text>
             ) : (
-              <View style={styles.bwRow}>
-                <TextInput
-                  style={styles.bwInput}
-                  value={weightDraft}
-                  onChangeText={setWeightDraft}
-                  placeholder="e.g. 82.5"
-                  placeholderTextColor="#555"
-                  keyboardType="decimal-pad"
-                  returnKeyType="done"
-                  onSubmitEditing={saveWeight}
-                />
-                <Text style={styles.bwUnit}>kg</Text>
-                <TouchableOpacity style={styles.bwAddBtn} onPress={saveWeight}>
-                  <Text style={styles.bwAddText}>Save</Text>
+              <>
+                <View style={styles.bwRow}>
+                  <TextInput
+                    style={styles.bwInput}
+                    value={weightDraft}
+                    onChangeText={setWeightDraft}
+                    placeholder="e.g. 82.5"
+                    placeholderTextColor="#555"
+                    keyboardType="decimal-pad"
+                    returnKeyType="done"
+                    onSubmitEditing={saveWeight}
+                  />
+                  <Text style={styles.bwUnit}>kg</Text>
+                  <TouchableOpacity style={styles.bwAddBtn} onPress={saveWeight} disabled={weighing}>
+                    <Text style={styles.bwAddText}>Save</Text>
+                  </TouchableOpacity>
+                </View>
+                <TouchableOpacity
+                  style={styles.bwPhotoBtn}
+                  onPress={weighByPhoto}
+                  disabled={weighing}
+                  activeOpacity={0.8}
+                >
+                  {weighing ? (
+                    <View style={styles.busyRow}>
+                      <ActivityIndicator color="#22D46E" />
+                      <Text style={styles.bwPhotoText}>Reading scale…</Text>
+                    </View>
+                  ) : (
+                    <Text style={styles.bwPhotoText}>📷  Snap the scale instead</Text>
+                  )}
                 </TouchableOpacity>
-              </View>
+              </>
             )}
           </View>
         )}
@@ -196,6 +231,12 @@ const styles = StyleSheet.create({
   bwUnit: { fontSize: 15, color: '#888', fontWeight: '600' },
   bwAddBtn: { height: 44, paddingHorizontal: 18, borderRadius: 8, backgroundColor: '#22D46E', alignItems: 'center', justifyContent: 'center' },
   bwAddText: { color: '#000', fontWeight: '800', fontSize: 14 },
+  bwPhotoBtn: {
+    marginTop: 10, height: 44, borderRadius: 8,
+    borderWidth: 1.5, borderColor: 'rgba(34,212,110,0.4)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  bwPhotoText: { color: '#22D46E', fontWeight: '700', fontSize: 14 },
   bwSaved: { fontSize: 14, color: '#22D46E', fontWeight: '600' },
 
   ctaContainer: {

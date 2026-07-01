@@ -48,6 +48,26 @@ Return ONLY this JSON object, no markdown fences, no commentary:
 }
 If the page is unreadable, return the same object with "exercises": [] and your best "rawText".`;
 
+// Reading a scale photo for the Monday weigh-in. Brian photographs his weight
+// each week; this lets that same photo flow into the weekly report.
+const BODYWEIGHT_PROMPT = `You are reading a photo showing a person's bodyweight — usually a bathroom scale's display (digital numbers or a dial), or the weight written by hand. Read it precisely and return JSON only.
+
+HOW TO READ
+- Find the single BODYWEIGHT reading. It is a number, typically between 40 and 250, often with one decimal place (e.g. 82.5).
+- Units: if "kg" is shown, use the number as-is. If "lb", "lbs" or "pounds" is shown, convert to kilograms (kg = pounds × 0.45359237) and round to 1 decimal, and report unit "lb". If no unit is shown, assume kilograms.
+- A smart scale may also show body-fat %, BMI, muscle %, water %, the time, or a user number — IGNORE all of those. Return only the total bodyweight.
+- If you cannot confidently read a single bodyweight value, set "kg" to null. Never guess.
+
+Return ONLY this JSON object, no markdown fences, no commentary:
+{ "kg": number | null, "unit": "kg" | "lb" | null, "raw": string }
+where "raw" is exactly what you read from the display (e.g. "82.5 kg", "181.9 lb").`;
+
+export interface ParsedBodyweight {
+  kg: number | null;
+  unit: 'kg' | 'lb' | null;
+  raw: string;
+}
+
 export interface ParsedTracker {
   month: string | null;
   day: string | null;
@@ -73,10 +93,8 @@ function num(v: any): number | null {
   return typeof v === 'number' && Number.isFinite(v) ? v : null;
 }
 
-export async function parseTrackerImage(
-  base64Jpeg: string,
-  apiKey: string,
-): Promise<ParsedTracker> {
+/** Send a base64 JPEG + prompt to the vision model and return its text reply. */
+async function callVision(base64Jpeg: string, prompt: string, apiKey: string, maxTokens: number): Promise<string> {
   const res = await fetch(API_URL, {
     method: 'POST',
     headers: {
@@ -86,7 +104,7 @@ export async function parseTrackerImage(
     },
     body: JSON.stringify({
       model: MODEL,
-      max_tokens: 4096,
+      max_tokens: maxTokens,
       messages: [
         {
           role: 'user',
@@ -95,7 +113,7 @@ export async function parseTrackerImage(
               type: 'image',
               source: { type: 'base64', media_type: 'image/jpeg', data: base64Jpeg },
             },
-            { type: 'text', text: PROMPT },
+            { type: 'text', text: prompt },
           ],
         },
       ],
@@ -114,11 +132,32 @@ export async function parseTrackerImage(
   }
 
   const data = await res.json();
-  const text: string = (data?.content ?? [])
+  return (data?.content ?? [])
     .filter((b: any) => b.type === 'text')
     .map((b: any) => b.text)
     .join('\n')
     .trim();
+}
+
+export async function parseBodyweightImage(
+  base64Jpeg: string,
+  apiKey: string,
+): Promise<ParsedBodyweight> {
+  const text = await callVision(base64Jpeg, BODYWEIGHT_PROMPT, apiKey, 512);
+  const parsed = JSON.parse(extractJson(text));
+  const kg = num(parsed.kg);
+  return {
+    kg: kg != null && kg > 0 && kg <= 500 ? kg : null,
+    unit: parsed.unit === 'kg' || parsed.unit === 'lb' ? parsed.unit : null,
+    raw: typeof parsed.raw === 'string' ? parsed.raw : text,
+  };
+}
+
+export async function parseTrackerImage(
+  base64Jpeg: string,
+  apiKey: string,
+): Promise<ParsedTracker> {
+  const text = await callVision(base64Jpeg, PROMPT, apiKey, 4096);
 
   const parsed = JSON.parse(extractJson(text));
   return {
