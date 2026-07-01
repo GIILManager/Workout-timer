@@ -78,6 +78,13 @@ export interface TrackerExercise {
   sets: TrackerSet[];
 }
 
+export interface BodyweightEntry {
+  id: string;
+  date: string;             // ISO date-time of the weigh-in
+  weekKey: string;          // ISO week, groups with tracker entries for export
+  kg: number;
+}
+
 export interface TrackerEntry {
   id: string;
   capturedAt: string;       // ISO
