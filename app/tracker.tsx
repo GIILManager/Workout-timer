@@ -8,14 +8,24 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTrackerStore, currentWeekKey } from '../src/store/trackerStore';
-import { runTrackerCapture, CaptureResult } from '../src/utils/trackerCapture';
+import { runTrackerCapture, CaptureResult, CaptureSource } from '../src/utils/trackerCapture';
 import { buildWeekCsv } from '../src/utils/csv';
-import { TrackerEntry, TrackerSet } from '../src/types';
+import { BodyweightEntry, TrackerEntry, TrackerSet } from '../src/types';
+
+/** Ask whether to use the camera or an existing photo, then run the chosen flow. */
+export function promptCaptureSource(run: (source: CaptureSource) => void) {
+  Alert.alert('Log tracker page', 'Photograph the page now, or pick a photo you already took.', [
+    { text: 'Take photo', onPress: () => run('camera') },
+    { text: 'Choose from library', onPress: () => run('library') },
+    { text: 'Cancel', style: 'cancel' },
+  ]);
+}
 
 /** Map a capture result to a user-facing alert. Returns true if an entry was saved. */
 export function handleCaptureResult(r: CaptureResult): boolean {
@@ -53,23 +63,28 @@ function describeSet(s: TrackerSet): string {
 
 export default function TrackerScreen() {
   const entries = useTrackerStore((s) => s.entries);
+  const bodyweights = useTrackerStore((s) => s.bodyweights);
   const apiKey = useTrackerStore((s) => s.apiKey);
   const deleteEntry = useTrackerStore((s) => s.deleteEntry);
+  const addBodyweight = useTrackerStore((s) => s.addBodyweight);
+  const deleteBodyweight = useTrackerStore((s) => s.deleteBodyweight);
   const clearWeeksBefore = useTrackerStore((s) => s.clearWeeksBefore);
 
   const [busy, setBusy] = useState<null | 'capturing'>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [weightDraft, setWeightDraft] = useState('');
 
   const week = currentWeekKey();
   const thisWeek = useMemo(() => entries.filter((e) => e.weekKey === week), [entries, week]);
-  const olderCount = entries.length - thisWeek.length;
+  const weekBw = useMemo(() => bodyweights.filter((b) => b.weekKey === week), [bodyweights, week]);
+  const olderCount = entries.length - thisWeek.length + (bodyweights.length - weekBw.length);
 
-  async function exportCsv(toExport: TrackerEntry[], label: string) {
-    if (toExport.length === 0) {
+  async function exportCsv(toExport: TrackerEntry[], bw: BodyweightEntry[], label: string) {
+    if (toExport.length === 0 && bw.length === 0) {
       Alert.alert('Nothing to export', 'No entries for this period yet.');
       return null;
     }
-    const csv = buildWeekCsv(toExport);
+    const csv = buildWeekCsv(toExport, bw);
     const uri = `${FileSystem.cacheDirectory}workout-${label}.csv`;
     await FileSystem.writeAsStringAsync(uri, csv, { encoding: FileSystem.EncodingType.UTF8 });
     if (await Sharing.isAvailableAsync()) {
@@ -80,29 +95,42 @@ export default function TrackerScreen() {
     return uri;
   }
 
-  async function handleCapture() {
-    setBusy('capturing');
-    try {
-      const result = await runTrackerCapture();
-      if (handleCaptureResult(result) && result.status === 'saved') {
-        setExpandedId(result.entry.id);
+  function handleCapture() {
+    promptCaptureSource(async (source) => {
+      setBusy('capturing');
+      try {
+        const result = await runTrackerCapture(source);
+        if (handleCaptureResult(result) && result.status === 'saved') {
+          setExpandedId(result.entry.id);
+        }
+      } finally {
+        setBusy(null);
       }
-    } finally {
-      setBusy(null);
+    });
+  }
+
+  async function handleAddWeight() {
+    const kg = parseFloat(weightDraft.replace(',', '.'));
+    if (!Number.isFinite(kg) || kg <= 0 || kg > 500) {
+      Alert.alert('Enter a weight', 'Type your bodyweight in kg, e.g. 82.5');
+      return;
     }
+    await addBodyweight(kg);
+    setWeightDraft('');
   }
 
   function handleExportOlder() {
     const older = entries.filter((e) => e.weekKey !== week);
+    const olderBw = bodyweights.filter((b) => b.weekKey !== week);
     Alert.alert(
       'Export & clear previous weeks?',
-      `Export ${older.length} entr${older.length === 1 ? 'y' : 'ies'} from previous weeks to a CSV, then remove them to start fresh?`,
+      `Export ${older.length + olderBw.length} item(s) from previous weeks to a CSV, then remove them to start fresh?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Export & Clear',
           onPress: async () => {
-            const uri = await exportCsv(older, 'previous-weeks');
+            const uri = await exportCsv(older, olderBw, 'previous-weeks');
             if (uri) await clearWeeksBefore(week);
           },
         },
@@ -144,6 +172,45 @@ export default function TrackerScreen() {
             <Text style={styles.rolloverAction}>EXPORT & CLEAR ▸</Text>
           </TouchableOpacity>
         )}
+
+        <Text style={styles.sectionLabel}>Bodyweight (Mondays)</Text>
+        <View style={styles.card}>
+          <View style={styles.bwInputRow}>
+            <TextInput
+              style={styles.bwInput}
+              value={weightDraft}
+              onChangeText={setWeightDraft}
+              placeholder="e.g. 82.5"
+              placeholderTextColor="#555"
+              keyboardType="decimal-pad"
+              returnKeyType="done"
+              onSubmitEditing={handleAddWeight}
+            />
+            <Text style={styles.bwUnit}>kg</Text>
+            <TouchableOpacity style={styles.bwAddBtn} onPress={handleAddWeight}>
+              <Text style={styles.bwAddText}>Add</Text>
+            </TouchableOpacity>
+          </View>
+          {weekBw.length === 0 ? (
+            <Text style={styles.bwHint}>Log your post-gym weigh-in. It's included in the weekly CSV.</Text>
+          ) : (
+            weekBw.map((b) => (
+              <TouchableOpacity
+                key={b.id}
+                style={styles.bwRow}
+                onLongPress={() =>
+                  Alert.alert('Delete weigh-in?', `${b.kg} kg on ${b.date.slice(0, 10)}`, [
+                    { text: 'Cancel', style: 'cancel' },
+                    { text: 'Delete', style: 'destructive', onPress: () => deleteBodyweight(b.id) },
+                  ])
+                }
+              >
+                <Text style={styles.bwDate}>{b.date.slice(0, 10)}</Text>
+                <Text style={styles.bwKg}>{b.kg} kg</Text>
+              </TouchableOpacity>
+            ))
+          )}
+        </View>
 
         <Text style={styles.sectionLabel}>This week · {week}</Text>
 
@@ -195,8 +262,8 @@ export default function TrackerScreen() {
           );
         })}
 
-        {thisWeek.length > 0 && (
-          <TouchableOpacity style={styles.exportBtn} onPress={() => exportCsv(thisWeek, week)} activeOpacity={0.8}>
+        {(thisWeek.length > 0 || weekBw.length > 0) && (
+          <TouchableOpacity style={styles.exportBtn} onPress={() => exportCsv(thisWeek, weekBw, week)} activeOpacity={0.8}>
             <Text style={styles.exportText}>⬇  Export this week (CSV)</Text>
           </TouchableOpacity>
         )}
@@ -253,6 +320,23 @@ const styles = StyleSheet.create({
     letterSpacing: 1.5, marginTop: 24, marginBottom: 8,
   },
   empty: { fontSize: 14, color: '#888', lineHeight: 22, paddingVertical: 8 },
+
+  bwInputRow: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 16 },
+  bwInput: {
+    flex: 1, height: 44, borderRadius: 8, paddingHorizontal: 12,
+    backgroundColor: '#1C1C1C', borderWidth: 1, borderColor: '#2A2A2A',
+    color: '#F0F0F0', fontSize: 16, fontVariant: ['tabular-nums'],
+  },
+  bwUnit: { fontSize: 15, color: '#888', fontWeight: '600' },
+  bwAddBtn: { height: 44, paddingHorizontal: 18, borderRadius: 8, backgroundColor: '#22D46E', alignItems: 'center', justifyContent: 'center' },
+  bwAddText: { color: '#000', fontWeight: '800', fontSize: 14 },
+  bwHint: { fontSize: 12, color: '#888', paddingHorizontal: 16, paddingBottom: 14, lineHeight: 18 },
+  bwRow: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: 16, paddingVertical: 12, borderTopWidth: 1, borderTopColor: '#1A1A1A',
+  },
+  bwDate: { fontSize: 13, color: '#888' },
+  bwKg: { fontSize: 15, color: '#F0F0F0', fontWeight: '700', fontVariant: ['tabular-nums'] },
 
   card: { backgroundColor: '#111', borderWidth: 1, borderColor: '#2A2A2A', borderRadius: 12, marginBottom: 10 },
   cardHeader: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 12 },

@@ -18,18 +18,31 @@ export type CaptureResult =
  * checks the API key, opens the camera, parses the page with Claude, and saves
  * the entry. UI concerns (alerts, busy state, navigation) stay in the caller.
  */
-export async function runTrackerCapture(): Promise<CaptureResult> {
+export type CaptureSource = 'camera' | 'library';
+
+export async function runTrackerCapture(source: CaptureSource = 'camera'): Promise<CaptureResult> {
   const { apiKey, addEntry } = useTrackerStore.getState();
   if (!apiKey) return { status: 'no-key' };
 
-  const perm = await ImagePicker.requestCameraPermissionsAsync();
-  if (!perm.granted) return { status: 'no-permission' };
-
-  const shot = await ImagePicker.launchCameraAsync({
-    base64: true,
-    quality: 0.5,
-    allowsEditing: true,
-  });
+  let shot: ImagePicker.ImagePickerResult;
+  if (source === 'library') {
+    // Existing photo of the page (e.g. taken earlier). The Android photo
+    // picker needs no runtime permission.
+    shot = await ImagePicker.launchImageLibraryAsync({
+      base64: true,
+      quality: 0.5,
+      allowsEditing: true,
+      mediaTypes: ['images'],
+    });
+  } else {
+    const perm = await ImagePicker.requestCameraPermissionsAsync();
+    if (!perm.granted) return { status: 'no-permission' };
+    shot = await ImagePicker.launchCameraAsync({
+      base64: true,
+      quality: 0.5,
+      allowsEditing: true,
+    });
+  }
   if (shot.canceled || !shot.assets?.[0]?.base64) return { status: 'cancelled' };
 
   try {
