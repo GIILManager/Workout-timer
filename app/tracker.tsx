@@ -14,17 +14,57 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTrackerStore, currentWeekKey } from '../src/store/trackerStore';
-import { runTrackerCapture, CaptureResult, CaptureSource } from '../src/utils/trackerCapture';
+import {
+  runTrackerCapture,
+  runBodyweightCapture,
+  BodyweightCaptureResult,
+  CaptureResult,
+  CaptureSource,
+} from '../src/utils/trackerCapture';
 import { buildWeekCsv } from '../src/utils/csv';
 import { BodyweightEntry, TrackerEntry, TrackerSet } from '../src/types';
 
 /** Ask whether to use the camera or an existing photo, then run the chosen flow. */
-export function promptCaptureSource(run: (source: CaptureSource) => void) {
-  Alert.alert('Log tracker page', 'Photograph the page now, or pick a photo you already took.', [
-    { text: 'Take photo', onPress: () => run('camera') },
-    { text: 'Choose from library', onPress: () => run('library') },
-    { text: 'Cancel', style: 'cancel' },
-  ]);
+export function promptCaptureSource(
+  run: (source: CaptureSource) => void,
+  copy?: { title: string; message: string },
+) {
+  Alert.alert(
+    copy?.title ?? 'Log tracker page',
+    copy?.message ?? 'Photograph the page now, or pick a photo you already took.',
+    [
+      { text: 'Take photo', onPress: () => run('camera') },
+      { text: 'Choose from library', onPress: () => run('library') },
+      { text: 'Cancel', style: 'cancel' },
+    ],
+  );
+}
+
+/** Map a bodyweight capture result to an alert. Returns true if a weight was saved. */
+export function handleBodyweightResult(r: BodyweightCaptureResult): boolean {
+  switch (r.status) {
+    case 'saved':
+      Alert.alert('Bodyweight logged', `${r.kg} kg saved — it'll be in this week's CSV.`);
+      return true;
+    case 'no-key':
+      Alert.alert('API key needed', 'Add your Anthropic API key in Settings → Tracker & API to read weigh-in photos.', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Open Settings', onPress: () => router.push('/settings') },
+      ]);
+      return false;
+    case 'no-permission':
+      Alert.alert('Camera permission', 'Camera access is needed to photograph your scale.');
+      return false;
+    case 'empty':
+      Alert.alert('Couldn’t read the weight', 'No bodyweight was detected. Try a clear, straight-on photo of the scale display.');
+      return false;
+    case 'error':
+      Alert.alert('Reading failed', r.message);
+      return false;
+    case 'cancelled':
+    default:
+      return false;
+  }
 }
 
 /** Map a capture result to a user-facing alert. Returns true if an entry was saved. */
@@ -70,7 +110,7 @@ export default function TrackerScreen() {
   const deleteBodyweight = useTrackerStore((s) => s.deleteBodyweight);
   const clearWeeksBefore = useTrackerStore((s) => s.clearWeeksBefore);
 
-  const [busy, setBusy] = useState<null | 'capturing'>(null);
+  const [busy, setBusy] = useState<null | 'capturing' | 'weighing'>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [weightDraft, setWeightDraft] = useState('');
 
@@ -107,6 +147,20 @@ export default function TrackerScreen() {
         setBusy(null);
       }
     });
+  }
+
+  function handleWeighPhoto() {
+    promptCaptureSource(
+      async (source) => {
+        setBusy('weighing');
+        try {
+          handleBodyweightResult(await runBodyweightCapture(source));
+        } finally {
+          setBusy(null);
+        }
+      },
+      { title: 'Log bodyweight', message: 'Photograph your scale now, or pick a photo you already took.' },
+    );
   }
 
   async function handleAddWeight() {
@@ -187,10 +241,25 @@ export default function TrackerScreen() {
               onSubmitEditing={handleAddWeight}
             />
             <Text style={styles.bwUnit}>kg</Text>
-            <TouchableOpacity style={styles.bwAddBtn} onPress={handleAddWeight}>
+            <TouchableOpacity style={styles.bwAddBtn} onPress={handleAddWeight} disabled={busy != null}>
               <Text style={styles.bwAddText}>Add</Text>
             </TouchableOpacity>
           </View>
+          <TouchableOpacity
+            style={styles.bwPhotoBtn}
+            onPress={handleWeighPhoto}
+            disabled={busy != null}
+            activeOpacity={0.8}
+          >
+            {busy === 'weighing' ? (
+              <View style={styles.busyRow}>
+                <ActivityIndicator color="#22D46E" />
+                <Text style={styles.bwPhotoText}>Reading scale…</Text>
+              </View>
+            ) : (
+              <Text style={styles.bwPhotoText}>📷  Snap the scale instead</Text>
+            )}
+          </TouchableOpacity>
           {weekBw.length === 0 ? (
             <Text style={styles.bwHint}>Log your post-gym weigh-in. It's included in the weekly CSV.</Text>
           ) : (
@@ -276,7 +345,7 @@ export default function TrackerScreen() {
           disabled={busy != null}
           activeOpacity={0.85}
         >
-          {busy != null ? (
+          {busy === 'capturing' ? (
             <View style={styles.busyRow}>
               <ActivityIndicator color="#000" />
               <Text style={styles.captureText}>Reading page…</Text>
@@ -330,6 +399,12 @@ const styles = StyleSheet.create({
   bwUnit: { fontSize: 15, color: '#888', fontWeight: '600' },
   bwAddBtn: { height: 44, paddingHorizontal: 18, borderRadius: 8, backgroundColor: '#22D46E', alignItems: 'center', justifyContent: 'center' },
   bwAddText: { color: '#000', fontWeight: '800', fontSize: 14 },
+  bwPhotoBtn: {
+    marginHorizontal: 16, marginBottom: 4, height: 44, borderRadius: 8,
+    borderWidth: 1.5, borderColor: 'rgba(34,212,110,0.4)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  bwPhotoText: { color: '#22D46E', fontWeight: '700', fontSize: 14 },
   bwHint: { fontSize: 12, color: '#888', paddingHorizontal: 16, paddingBottom: 14, lineHeight: 18 },
   bwRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',

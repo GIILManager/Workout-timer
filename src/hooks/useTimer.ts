@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { triggerTimerAlert } from '../utils/alertService';
+import { triggerSustainedAlert, triggerTimerAlert } from '../utils/alertService';
 
 interface TimerState {
   elapsed: number;
@@ -48,11 +48,16 @@ export function useTimer(
       const remaining = target - elapsed;
       const isOvertime = remaining < 0;
 
-      // Alert once when the allotted time is up — for the SET phase as well as
-      // BREAK, so you know to pick up the pace. 3 pulses for rest, 2 for a set.
+      // Alert once when the allotted time is up. The SET/TIMED target gets a
+      // sustained ~2s beep + vibration (impossible to miss mid-rep); BREAK and
+      // transition ends get a 3-pulse alert so you know the rest is over.
       if (isOvertime && !alertedRef.current && pausedAt == null) {
         alertedRef.current = true;
-        triggerTimerAlert(phase === 'break' || phase === 'transition' ? 3 : 2);
+        if (phase === 'break' || phase === 'transition') {
+          triggerTimerAlert(3);
+        } else {
+          triggerSustainedAlert(2000);
+        }
       }
 
       setState({ elapsed, remaining, isOvertime, hasAlerted: alertedRef.current });
