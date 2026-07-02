@@ -6,6 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
+import { ChevronLeftIcon, ChevronUpIcon } from '../src/components/icons';
 import { useHistoryStore } from '../src/store/historyStore';
 import { getWorkoutByDay } from '../src/data/workouts';
 import { formatHoursMinutes, formatDate } from '../src/utils/time';
@@ -49,8 +50,13 @@ export default function HistoryScreen() {
   return (
     <SafeAreaView style={styles.screen}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-          <Text style={styles.backIcon}>‹</Text>
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={() => router.back()}
+          accessibilityRole="button"
+          accessibilityLabel="Back"
+        >
+          <ChevronLeftIcon size={24} color="#888" />
         </TouchableOpacity>
         <Text style={styles.title}>HISTORY</Text>
       </View>
@@ -97,8 +103,16 @@ export default function HistoryScreen() {
                       <Text style={styles.detailStat}>{s.stat}</Text>
                     </View>
                   ))}
-                  <TouchableOpacity onPress={() => toggleExpand(session.id)} style={styles.collapseBtn}>
-                    <Text style={styles.collapseText}>Collapse ↑</Text>
+                  <TouchableOpacity
+                    onPress={() => toggleExpand(session.id)}
+                    style={styles.collapseBtn}
+                    accessibilityRole="button"
+                    accessibilityLabel="Collapse session details"
+                  >
+                    <View style={styles.collapseRow}>
+                      <Text style={styles.collapseText}>Collapse</Text>
+                      <ChevronUpIcon size={13} color="#888" />
+                    </View>
                   </TouchableOpacity>
                 </View>
               )}
@@ -118,7 +132,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4,
   },
   backBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', marginLeft: -10 },
-  backIcon: { fontSize: 28, color: '#888', lineHeight: 32 },
   title: { flex: 1, fontSize: 18, fontWeight: '700', color: '#F0F0F0' },
 
   empty: { padding: 40, alignItems: 'center' },
@@ -141,6 +154,7 @@ const styles = StyleSheet.create({
   detailName: { fontSize: 13, color: '#888', flex: 1 },
   detailStat: { fontSize: 12, color: '#888' },
   collapseBtn: { paddingTop: 8, alignItems: 'center' },
+  collapseRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   collapseText: { fontSize: 12, color: '#888' },
 
   divider: { height: 1, backgroundColor: '#1A1A1A' },

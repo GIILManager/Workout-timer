@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Slider from '@react-native-community/slider';
+import { ChevronLeftIcon, TrashIcon } from '../src/components/icons';
 import { useHistoryStore } from '../src/store/historyStore';
 import { useTrackerStore } from '../src/store/trackerStore';
 import { UserSettings } from '../src/types';
@@ -126,13 +127,18 @@ export default function SettingsScreen() {
   return (
     <SafeAreaView style={styles.screen}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-          <Text style={styles.backIcon}>‹</Text>
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={() => router.back()}
+          accessibilityRole="button"
+          accessibilityLabel="Back"
+        >
+          <ChevronLeftIcon size={24} color="#888" />
         </TouchableOpacity>
         <Text style={styles.title}>SETTINGS</Text>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
 
         <Text style={styles.sectionLabel}>Timer Defaults</Text>
 
@@ -205,7 +211,7 @@ export default function SettingsScreen() {
 
         <TouchableOpacity style={styles.destructiveCard} onPress={handleResetLearning} activeOpacity={0.7}>
           <View style={styles.destructiveRow}>
-            <Text style={styles.destructiveIcon}>🗑</Text>
+            <TrashIcon size={17} color="#EF4444" />
             <Text style={styles.destructiveLabel}>Reset Learned Timings</Text>
           </View>
           <Text style={styles.destructiveHint}>Resets adapted times. Sessions history kept.</Text>
@@ -223,7 +229,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4,
   },
   backBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', marginLeft: -10 },
-  backIcon: { fontSize: 28, color: '#888', lineHeight: 32 },
   title: { flex: 1, fontSize: 18, fontWeight: '700', color: '#F0F0F0' },
 
   content: { paddingHorizontal: 24, paddingBottom: 40 },
@@ -259,7 +264,6 @@ const styles = StyleSheet.create({
     padding: 16, marginBottom: 8,
   },
   destructiveRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  destructiveIcon: { fontSize: 18 },
   destructiveLabel: { fontSize: 15, fontWeight: '500', color: '#EF4444' },
   destructiveHint: { fontSize: 12, color: '#888', marginTop: 6 },
 });

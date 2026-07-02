@@ -7,36 +7,42 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  ChevronRightIcon,
+  ClipboardIcon,
+  ClockIcon,
+  GearIcon,
+  MoonIcon,
+  PlayIcon,
+} from '../src/components/icons';
 import { useHistoryStore } from '../src/store/historyStore';
 import { useWorkoutStore } from '../src/store/workoutStore';
 import { getTodayWorkout, getNextWorkout, WORKOUTS } from '../src/data/workouts';
 import { getAdaptedTiming, estimateTotalDuration } from '../src/utils/timing';
 import { Exercise, WorkoutDay } from '../src/types';
 
-function ClockIcon() {
+function HeaderIconButton({
+  label,
+  onPress,
+  children,
+}: {
+  label: string;
+  onPress: () => void;
+  children: React.ReactNode;
+}) {
   return (
-    <View style={styles.iconBtn}>
-      <Text style={styles.iconText}>◷</Text>
-    </View>
-  );
-}
-
-function GearIcon() {
-  return (
-    <View style={styles.iconBtn}>
-      <Text style={styles.iconText}>⚙</Text>
-    </View>
-  );
-}
-
-function TrackerIcon() {
-  return (
-    <View style={styles.iconBtn}>
-      <Text style={styles.iconText}>📷</Text>
-    </View>
+    <TouchableOpacity
+      style={styles.iconBtn}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+    >
+      {children}
+    </TouchableOpacity>
   );
 }
 
@@ -60,12 +66,17 @@ function ExerciseRow({ ex, onPress }: { ex: Exercise; onPress: () => void }) {
         <Text style={styles.exerciseName}>{ex.name}</Text>
         <Text style={styles.exerciseReps}>{ex.sets} × {ex.reps}</Text>
       </View>
-      <Text style={styles.chevron}>›</Text>
+      <ChevronRightIcon size={16} color="#3A3A3A" />
     </TouchableOpacity>
   );
 }
 
 export default function HomeScreen() {
+  const { height } = useWindowDimensions();
+  // Split-screen / short windows: keep only the start button pinned and let
+  // everything else scroll so nothing is cut off.
+  const isCompact = height < 520;
+
   const settings = useHistoryStore((s) => s.settings);
   const timingRecords = useHistoryStore((s) => s.timingRecords);
   const startWorkout = useWorkoutStore((s) => s.startWorkout);
@@ -117,13 +128,35 @@ export default function HomeScreen() {
     beginWorkout(workout, startIndex);
   }
 
+  function Header() {
+    return (
+      <View style={styles.header}>
+        <Text style={styles.appTitle}>WORKOUT TIMER</Text>
+        <View style={styles.headerIcons}>
+          <HeaderIconButton label="Tracker" onPress={() => router.push('/tracker')}>
+            <ClipboardIcon size={21} color="#888" />
+          </HeaderIconButton>
+          <HeaderIconButton label="History" onPress={() => router.push('/history')}>
+            <ClockIcon size={21} color="#888" />
+          </HeaderIconButton>
+          <HeaderIconButton label="Settings" onPress={() => router.push('/settings')}>
+            <GearIcon size={21} color="#888" />
+          </HeaderIconButton>
+        </View>
+      </View>
+    );
+  }
+
   function ResumeBanner() {
     if (!hasActive) return null;
     return (
       <TouchableOpacity style={styles.resumeBanner} onPress={() => router.push('/workout')} activeOpacity={0.85}>
         <View style={styles.resumeDot} />
         <Text style={styles.resumeText}>Workout in progress — {activeWorkout?.name}</Text>
-        <Text style={styles.resumeAction}>RESUME ▸</Text>
+        <View style={styles.resumeAction}>
+          <Text style={styles.resumeActionText}>RESUME</Text>
+          <ChevronRightIcon size={13} color="#22D46E" strokeWidth={3} />
+        </View>
       </TouchableOpacity>
     );
   }
@@ -145,6 +178,8 @@ export default function HomeScreen() {
               style={[styles.pickerChip, today?.day === d.key && styles.pickerChipActive]}
               onPress={() => handleStartWorkout(WORKOUTS[d.key])}
               activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={`Start ${d.key} workout`}
             >
               <Text style={styles.pickerChipText}>{d.tag}</Text>
             </TouchableOpacity>
@@ -157,30 +192,24 @@ export default function HomeScreen() {
   if (!today) {
     return (
       <SafeAreaView style={styles.screen}>
-        <View style={styles.header}>
-          <Text style={styles.appTitle}>WORKOUT TIMER</Text>
-          <View style={styles.headerIcons}>
-            <TouchableOpacity onPress={() => router.push('/tracker')}><TrackerIcon /></TouchableOpacity>
-            <TouchableOpacity onPress={() => router.push('/history')}><ClockIcon /></TouchableOpacity>
-            <TouchableOpacity onPress={() => router.push('/settings')}><GearIcon /></TouchableOpacity>
-          </View>
-        </View>
-
+        <Header />
         <ResumeBanner />
 
-        <View style={styles.restDayCenter}>
-          <Text style={styles.restEmoji}>😴</Text>
-          <Text style={styles.restTitle}>REST DAY</Text>
-          <Text style={styles.restSubtitle}>No 4AM alarm. Sleep in. Your muscles grow during rest.</Text>
-          <View style={styles.divider} />
-          <Text style={styles.nextLabel}>Next Up</Text>
-          {nextWorkout && (
-            <Text style={styles.nextWorkout}>
-              {nextWorkout.name} — {nextWorkout.muscleGroups}
-            </Text>
-          )}
-          <DayPicker label="Or start any workout" />
-        </View>
+        <ScrollView contentContainerStyle={styles.restScroll}>
+          <View style={styles.restDayCenter}>
+            <MoonIcon size={56} color="#555" strokeWidth={1.5} />
+            <Text style={styles.restTitle}>REST DAY</Text>
+            <Text style={styles.restSubtitle}>No 4AM alarm. Sleep in. Your muscles grow during rest.</Text>
+            <View style={styles.divider} />
+            <Text style={styles.nextLabel}>Next Up</Text>
+            {nextWorkout && (
+              <Text style={styles.nextWorkout}>
+                {nextWorkout.name} — {nextWorkout.muscleGroups}
+              </Text>
+            )}
+            <DayPicker label="Or start any workout" />
+          </View>
+        </ScrollView>
       </SafeAreaView>
     );
   }
@@ -188,55 +217,55 @@ export default function HomeScreen() {
   const estSeconds = estimateTotalDuration(today, timingRecords, settings);
   const estMinutes = Math.round(estSeconds / 60);
 
+  const startLabel = hasActive ? 'RESUME WORKOUT' : 'START WORKOUT';
+  const startAction = hasActive ? () => router.push('/workout') : () => handleStartWorkout();
+
   return (
     <SafeAreaView style={styles.screen}>
-      <View style={styles.header}>
-        <Text style={styles.appTitle}>WORKOUT TIMER</Text>
-        <View style={styles.headerIcons}>
-          <TouchableOpacity onPress={() => router.push('/history')}><ClockIcon /></TouchableOpacity>
-          <TouchableOpacity onPress={() => router.push('/settings')}><GearIcon /></TouchableOpacity>
-        </View>
-      </View>
-
+      <Header />
       <ResumeBanner />
 
-      <View style={styles.dayBlock}>
-        <Text style={styles.dayName}>{today.name}</Text>
-        <Text style={styles.muscleGroups}>{today.muscleGroups}</Text>
-      </View>
-
-      <View style={styles.statsCard}>
-        <View>
-          <Text style={styles.statLabel}>Exercises</Text>
-          <Text style={styles.statValue}>{today.exercises.length}</Text>
+      <ScrollView contentContainerStyle={{ paddingBottom: isCompact ? 100 : 200 }}>
+        <View style={styles.dayBlock}>
+          <Text style={[styles.dayName, isCompact && styles.dayNameCompact]}>{today.name}</Text>
+          <Text style={styles.muscleGroups}>{today.muscleGroups}</Text>
         </View>
-        <View style={{ alignItems: 'flex-end' }}>
-          <Text style={styles.statLabel}>Est. Time</Text>
-          <Text style={styles.statValue}>~{estMinutes} min</Text>
+
+        <View style={styles.statsCard}>
+          <View>
+            <Text style={styles.statLabel}>Exercises</Text>
+            <Text style={styles.statValue}>{today.exercises.length}</Text>
+          </View>
+          <View style={{ alignItems: 'flex-end' }}>
+            <Text style={styles.statLabel}>Est. Time</Text>
+            <Text style={styles.statValue}>~{estMinutes} min</Text>
+          </View>
         </View>
-      </View>
 
-      <Text style={styles.sectionLabel}>Today's Programme</Text>
+        <Text style={styles.sectionLabel}>Today's Programme</Text>
+        <Text style={styles.tapHint}>Tap an exercise to start from there</Text>
 
-      <Text style={styles.tapHint}>Tap an exercise to start from there</Text>
-
-      <ScrollView style={styles.exerciseList} contentContainerStyle={{ paddingBottom: 120 }}>
         {today.exercises.map((ex, i) => (
           <ExerciseRow key={ex.id} ex={ex} onPress={() => handleStartWorkout(today, i)} />
         ))}
+
+        {isCompact && <DayPicker label="Switch workout" />}
       </ScrollView>
 
       <View style={styles.ctaContainer}>
-        <DayPicker label="Switch workout" />
-        {hasActive ? (
-          <TouchableOpacity style={styles.startBtn} onPress={() => router.push('/workout')} activeOpacity={0.85}>
-            <Text style={styles.startBtnText}>▶  RESUME WORKOUT</Text>
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity style={styles.startBtn} onPress={() => handleStartWorkout()} activeOpacity={0.85}>
-            <Text style={styles.startBtnText}>▶  START WORKOUT</Text>
-          </TouchableOpacity>
-        )}
+        {!isCompact && <DayPicker label="Switch workout" />}
+        <TouchableOpacity
+          style={[styles.startBtn, isCompact && styles.startBtnCompact]}
+          onPress={startAction}
+          activeOpacity={0.85}
+          accessibilityRole="button"
+          accessibilityLabel={startLabel}
+        >
+          <View style={styles.startBtnRow}>
+            <PlayIcon size={16} color="#000" />
+            <Text style={styles.startBtnText}>{startLabel}</Text>
+          </View>
+        </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
@@ -251,10 +280,10 @@ const styles = StyleSheet.create({
   appTitle: { fontSize: 12, fontWeight: '600', letterSpacing: 2, textTransform: 'uppercase', color: '#888' },
   headerIcons: { flexDirection: 'row', gap: 8 },
   iconBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
-  iconText: { fontSize: 22, color: '#888' },
 
   dayBlock: { paddingHorizontal: 24, paddingTop: 24, paddingBottom: 16 },
   dayName: { fontSize: 40, fontWeight: '900', color: '#22D46E', letterSpacing: -1 },
+  dayNameCompact: { fontSize: 28 },
   muscleGroups: { fontSize: 15, color: '#888', marginTop: 4 },
 
   statsCard: {
@@ -280,8 +309,8 @@ const styles = StyleSheet.create({
   },
   resumeDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#22D46E' },
   resumeText: { flex: 1, fontSize: 13, fontWeight: '600', color: '#F0F0F0' },
-  resumeAction: { fontSize: 12, fontWeight: '800', color: '#22D46E', letterSpacing: 0.5 },
-  exerciseList: { flex: 1 },
+  resumeAction: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  resumeActionText: { fontSize: 12, fontWeight: '800', color: '#22D46E', letterSpacing: 0.5 },
   exerciseRow: {
     flexDirection: 'row', alignItems: 'center', gap: 12,
     paddingHorizontal: 24, paddingVertical: 12,
@@ -295,7 +324,6 @@ const styles = StyleSheet.create({
   exerciseInfo: { flex: 1 },
   exerciseName: { fontSize: 15, fontWeight: '500', color: '#F0F0F0' },
   exerciseReps: { fontSize: 12, color: '#888', marginTop: 2 },
-  chevron: { fontSize: 18, color: '#262626' },
 
   ctaContainer: {
     position: 'absolute', left: 0, right: 0, bottom: 0,
@@ -308,10 +336,13 @@ const styles = StyleSheet.create({
     shadowColor: '#22D46E', shadowOpacity: 0.3, shadowRadius: 12, shadowOffset: { width: 0, height: 4 },
     elevation: 8,
   },
+  startBtnCompact: { height: 52 },
+  startBtnRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   startBtnText: { color: '#000', fontSize: 17, fontWeight: '800', letterSpacing: 0.5 },
 
+  restScroll: { flexGrow: 1, justifyContent: 'center' },
   restDayCenter: {
-    flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24,
+    alignItems: 'center', paddingHorizontal: 24, paddingVertical: 32,
   },
   pickerWrap: { alignItems: 'center', marginTop: 16 },
   pickerLabel: { fontSize: 10, fontWeight: '600', color: '#666', textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 8 },
@@ -323,7 +354,6 @@ const styles = StyleSheet.create({
   pickerChipActive: { borderColor: '#22D46E' },
   pickerChipText: { color: '#F0F0F0', fontSize: 12, fontWeight: '700', letterSpacing: 1 },
 
-  restEmoji: { fontSize: 64 },
   restTitle: { fontSize: 36, fontWeight: '900', color: '#888', letterSpacing: -1, marginTop: 24 },
   restSubtitle: { fontSize: 15, color: '#888', textAlign: 'center', marginTop: 8, lineHeight: 22, maxWidth: 260 },
   divider: { width: 80, height: 1, backgroundColor: '#1C1C1C', marginVertical: 32 },

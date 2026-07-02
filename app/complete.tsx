@@ -1,9 +1,11 @@
 import { router } from 'expo-router';
 import React, { useState } from 'react';
 import {
-  ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View,
+  ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity,
+  useWindowDimensions, View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { CameraIcon, CheckIcon } from '../src/components/icons';
 import { useHistoryStore } from '../src/store/historyStore';
 import { useTrackerStore } from '../src/store/trackerStore';
 import { formatHoursMinutes } from '../src/utils/time';
@@ -11,6 +13,8 @@ import { runBodyweightCapture, runTrackerCapture } from '../src/utils/trackerCap
 import { handleBodyweightResult, handleCaptureResult, promptCaptureSource } from './tracker';
 
 export default function CompleteScreen() {
+  const { height } = useWindowDimensions();
+  const isCompact = height < 520;
   const sessions = useHistoryStore((s) => s.sessions);
   const latest = sessions[0] ?? null;
   const addBodyweight = useTrackerStore((s) => s.addBodyweight);
@@ -83,13 +87,18 @@ export default function CompleteScreen() {
 
   return (
     <SafeAreaView style={styles.screen}>
-      <ScrollView contentContainerStyle={{ paddingBottom: 120 }}>
-        <View style={styles.hero}>
-          <View style={styles.checkCircle}>
-            <Text style={styles.checkMark}>✓</Text>
+      <ScrollView
+        contentContainerStyle={{ paddingBottom: isCompact ? 130 : 140 }}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={[styles.hero, isCompact && styles.heroCompact]}>
+          <View style={[styles.checkCircle, isCompact && styles.checkCircleCompact]}>
+            <CheckIcon size={isCompact ? 26 : 38} color="#fff" strokeWidth={3} />
           </View>
-          <Text style={styles.title}>WORKOUT COMPLETE</Text>
-          <Text style={styles.duration}>{formatHoursMinutes(totalDuration)}</Text>
+          <Text style={[styles.title, isCompact && styles.titleCompact]}>WORKOUT COMPLETE</Text>
+          <Text style={[styles.duration, isCompact && styles.durationCompact]}>
+            {formatHoursMinutes(totalDuration)}
+          </Text>
           <Text style={styles.durationLabel}>total time</Text>
         </View>
 
@@ -118,7 +127,10 @@ export default function CompleteScreen() {
           <View style={styles.bwCard}>
             <Text style={styles.bwTitle}>Monday weigh-in</Text>
             {weightSaved ? (
-              <Text style={styles.bwSaved}>✓ Bodyweight saved — it'll be in this week's CSV.</Text>
+              <View style={styles.bwSavedRow}>
+                <CheckIcon size={16} color="#22D46E" strokeWidth={3} />
+                <Text style={styles.bwSaved}>Bodyweight saved — it'll be in this week's CSV.</Text>
+              </View>
             ) : (
               <>
                 <View style={styles.bwRow}>
@@ -149,7 +161,10 @@ export default function CompleteScreen() {
                       <Text style={styles.bwPhotoText}>Reading scale…</Text>
                     </View>
                   ) : (
-                    <Text style={styles.bwPhotoText}>📷  Snap the scale instead</Text>
+                    <View style={styles.busyRow}>
+                      <CameraIcon size={16} color="#22D46E" />
+                      <Text style={styles.bwPhotoText}>Snap the scale instead</Text>
+                    </View>
                   )}
                 </TouchableOpacity>
               </>
@@ -171,7 +186,10 @@ export default function CompleteScreen() {
               <Text style={styles.doneBtnText}>Reading page…</Text>
             </View>
           ) : (
-            <Text style={styles.doneBtnText}>📷  Log tracker page</Text>
+            <View style={styles.busyRow}>
+              <CameraIcon size={19} color="#000" />
+              <Text style={styles.doneBtnText}>Log tracker page</Text>
+            </View>
           )}
         </TouchableOpacity>
         <TouchableOpacity
@@ -191,13 +209,16 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: '#0A0A0A' },
 
   hero: { paddingTop: 64, paddingHorizontal: 24, alignItems: 'center' },
+  heroCompact: { paddingTop: 20 },
   checkCircle: {
     width: 80, height: 80, borderRadius: 40, backgroundColor: '#22D46E',
     alignItems: 'center', justifyContent: 'center',
   },
-  checkMark: { fontSize: 36, color: '#fff', fontWeight: '900' },
+  checkCircleCompact: { width: 56, height: 56, borderRadius: 28 },
   title: { fontSize: 26, fontWeight: '900', color: '#F0F0F0', letterSpacing: -0.5, textAlign: 'center', marginTop: 24 },
+  titleCompact: { fontSize: 20, marginTop: 12 },
   duration: { fontSize: 56, fontWeight: '900', color: '#22D46E', textAlign: 'center', marginTop: 8, lineHeight: 64 },
+  durationCompact: { fontSize: 40, lineHeight: 46 },
   durationLabel: { fontSize: 13, color: '#888', textAlign: 'center', marginTop: 6 },
 
   statsCard: {
@@ -237,7 +258,8 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   bwPhotoText: { color: '#22D46E', fontWeight: '700', fontSize: 14 },
-  bwSaved: { fontSize: 14, color: '#22D46E', fontWeight: '600' },
+  bwSavedRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  bwSaved: { flex: 1, fontSize: 14, color: '#22D46E', fontWeight: '600' },
 
   ctaContainer: {
     position: 'absolute', left: 0, right: 0, bottom: 0,

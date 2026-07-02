@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { View } from 'react-native';
 import Animated, {
   Easing,
   useAnimatedProps,
@@ -9,9 +9,8 @@ import Animated, {
 } from 'react-native-reanimated';
 import Svg, { Circle } from 'react-native-svg';
 
-const RADIUS = 128;
-const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
-const SIZE = 280;
+const DEFAULT_SIZE = 280;
+const STROKE = 12;
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
@@ -19,6 +18,8 @@ interface Props {
   phase: 'set' | 'break' | 'amrap' | 'timed' | 'transition' | 'idle';
   isOvertime: boolean;
   progress: number;
+  /** Ring diameter in px — scaled down in compact/split-screen layouts. */
+  size?: number;
 }
 
 function getStrokeColor(phase: Props['phase'], isOvertime: boolean): string {
@@ -27,7 +28,10 @@ function getStrokeColor(phase: Props['phase'], isOvertime: boolean): string {
   return '#22D46E';
 }
 
-export function CircularTimer({ phase, isOvertime, progress }: Props) {
+export function CircularTimer({ phase, isOvertime, progress, size = DEFAULT_SIZE }: Props) {
+  const SIZE = size;
+  const RADIUS = (SIZE - STROKE * 2) / 2;
+  const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
   const animProgress = useSharedValue(progress);
   const amrapRotation = useSharedValue(0);
 
@@ -71,7 +75,7 @@ export function CircularTimer({ phase, isOvertime, progress }: Props) {
   const dasharray = phase === 'amrap' ? `${CIRCUMFERENCE * 0.25} ${CIRCUMFERENCE * 0.75}` : `${CIRCUMFERENCE}`;
 
   return (
-    <View style={styles.container}>
+    <View style={{ width: SIZE, height: SIZE, position: 'relative' }}>
       <Svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`}>
         <Circle
           cx={SIZE / 2}
@@ -79,7 +83,7 @@ export function CircularTimer({ phase, isOvertime, progress }: Props) {
           r={RADIUS}
           fill="none"
           stroke="#1C1C1C"
-          strokeWidth={12}
+          strokeWidth={STROKE}
         />
         <AnimatedCircle
           cx={SIZE / 2}
@@ -87,7 +91,7 @@ export function CircularTimer({ phase, isOvertime, progress }: Props) {
           r={RADIUS}
           fill="none"
           stroke={color}
-          strokeWidth={12}
+          strokeWidth={STROKE}
           strokeLinecap="round"
           strokeDasharray={dasharray}
           animatedProps={ringProps}
@@ -97,11 +101,3 @@ export function CircularTimer({ phase, isOvertime, progress }: Props) {
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    width: SIZE,
-    height: SIZE,
-    position: 'relative',
-  },
-});

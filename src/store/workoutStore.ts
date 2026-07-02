@@ -206,7 +206,7 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => {
       cancelAlert(pendingAlertId);
       dismissOngoing(ongoingId);
       set({ pausedAt: Date.now(), pendingAlertId: null, ongoingId: null });
-      presentOngoing('⏸ Paused', 'Open the app to resume your timer').then((id) =>
+      presentOngoing('Paused', 'Open the app to resume your timer').then((id) =>
         set({ ongoingId: id }),
       );
     },
