@@ -3,7 +3,11 @@ import React, { useState } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Slider from '@react-native-community/slider';
-import { ChevronLeftIcon, TrashIcon } from '../src/components/icons';
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system';
+import { ChevronLeftIcon, DownloadIcon, TrashIcon, UploadIcon } from '../src/components/icons';
+import { restoreFromBackupJson } from '../src/utils/backup';
+import { shareBackupNow } from '../src/utils/exportWeek';
 import { useHistoryStore } from '../src/store/historyStore';
 import { useTrackerStore } from '../src/store/trackerStore';
 import { UserSettings } from '../src/types';
@@ -113,6 +117,54 @@ function ApiKeyField() {
 export default function SettingsScreen() {
   const { settings, updateSettings, resetLearning } = useHistoryStore();
 
+  async function handleBackupNow() {
+    try {
+      const res = await shareBackupNow();
+      if (typeof res === 'object') {
+        Alert.alert('Sharing unavailable', `Backup written to:\n${res.savedTo}`);
+      }
+    } catch (e: any) {
+      Alert.alert('Backup failed', e?.message ?? 'Could not create the backup.');
+    }
+  }
+
+  async function handleRestore() {
+    const picked = await DocumentPicker.getDocumentAsync({
+      // Some file managers mislabel .json — accept everything and validate
+      // the contents instead of greying files out.
+      type: '*/*',
+      copyToCacheDirectory: true,
+    });
+    if (picked.canceled || !picked.assets?.[0]?.uri) return;
+    const { uri, name } = picked.assets[0];
+
+    Alert.alert(
+      'Restore from backup?',
+      `This REPLACES all app data (history, learned timings, tracker entries) with the contents of "${name}". Your API key is kept.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Restore',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const text = await FileSystem.readAsStringAsync(uri, {
+                encoding: FileSystem.EncodingType.UTF8,
+              });
+              const summary = await restoreFromBackupJson(text);
+              Alert.alert(
+                'Restore complete',
+                `${summary.sessions} sessions, ${summary.timingRecords} timing records, ${summary.trackerEntries} tracker entries and ${summary.bodyweights} weigh-ins restored.`,
+              );
+            } catch (e: any) {
+              Alert.alert('Restore failed', e?.message ?? 'Could not read that backup.');
+            }
+          },
+        },
+      ],
+    );
+  }
+
   function handleResetLearning() {
     Alert.alert(
       'Reset Learned Timings?',
@@ -193,6 +245,28 @@ export default function SettingsScreen() {
 
         <ApiKeyField />
 
+        <Text style={styles.sectionLabel}>Data</Text>
+
+        <TouchableOpacity style={styles.card} onPress={handleBackupNow} activeOpacity={0.7}>
+          <View style={styles.dataRow}>
+            <DownloadIcon size={17} color="#22D46E" />
+            <Text style={styles.dataLabel}>Back up now (JSON)</Text>
+          </View>
+          <Text style={styles.hint}>
+            Shares a full backup — history, learned timings, tracker entries, weigh-ins. Weekly exports include this file automatically.
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.card} onPress={handleRestore} activeOpacity={0.7}>
+          <View style={styles.dataRow}>
+            <UploadIcon size={17} color="#F59E0B" />
+            <Text style={styles.dataLabel}>Restore from backup</Text>
+          </View>
+          <Text style={styles.hint}>
+            Pick a backup JSON to replace all app data — e.g. after moving to a new phone. The API key is re-entered separately.
+          </Text>
+        </TouchableOpacity>
+
         <Text style={styles.sectionLabel}>Learning</Text>
 
         <View style={styles.card}>
@@ -263,6 +337,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#111', borderWidth: 1, borderColor: '#2A2A2A', borderRadius: 12,
     padding: 16, marginBottom: 8,
   },
+  dataRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  dataLabel: { fontSize: 15, fontWeight: '500', color: '#F0F0F0' },
+
   destructiveRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   destructiveLabel: { fontSize: 15, fontWeight: '500', color: '#EF4444' },
   destructiveHint: { fontSize: 12, color: '#888', marginTop: 6 },

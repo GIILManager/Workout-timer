@@ -30,12 +30,6 @@
         }
       ],
       [
-        "expo-notifications",
-        {
-          "color": "#22D46E"
-        }
-      ],
-      [
         "expo-image-picker",
         {
           "cameraPermission": "Allow $(PRODUCT_NAME) to photograph your handwritten workout tracker page."
