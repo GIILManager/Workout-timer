@@ -6,8 +6,14 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useHistoryStore } from '../src/store/historyStore';
 import { useTrackerStore } from '../src/store/trackerStore';
-import { setupNotifications } from '../src/utils/notificationService';
+import {
+  ensureWeeklyExportReminder,
+  setupNotifications,
+} from '../src/utils/notificationService';
 import { warmUpAlert } from '../src/utils/alertService';
+// Side effect: registers the notification action-button handlers (foreground +
+// background) so "Done"/"Start next set" work from the shade and lock screen.
+import '../src/utils/notificationHandlers';
 
 export default function RootLayout() {
   const hydrate = useHistoryStore((s) => s.hydrate);
@@ -15,7 +21,9 @@ export default function RootLayout() {
 
   useEffect(() => {
     hydrate();
-    hydrateTracker();
+    hydrateTracker().then(() => {
+      ensureWeeklyExportReminder(useTrackerStore.getState().lastExportWeekKey);
+    });
     setupNotifications();
     warmUpAlert();
   }, []);

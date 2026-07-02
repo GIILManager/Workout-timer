@@ -1,8 +1,13 @@
 import { create } from 'zustand';
 import { Exercise, SetRecord, TimerPhase, WorkoutDay } from '../types';
 import {
+  ACTION_DONE,
+  ACTION_NEXT_EXERCISE,
+  ACTION_NEXT_SET,
   cancelAlert,
   dismissOngoing,
+  OngoingOptions,
+  PhaseAction,
   presentOngoing,
   scheduleAlert,
 } from '../utils/notificationService';
@@ -105,12 +110,14 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => {
     let alertBody = '';
     let statusTitle = '';
     let statusBody = '';
+    let actions: PhaseAction[] = [];
 
     if (currentPhase === 'break') {
       alertTitle = 'Break over';
       alertBody = `${ex.name} · set ${currentSetNumber + 1} ready`;
       statusTitle = `BREAK · ${ex.name}`;
       statusBody = remaining != null ? `next set at ${endClock(remaining)}` : '';
+      actions = [ACTION_NEXT_SET];
     } else if (currentPhase === 'transition') {
       const ni = activeWorkout ? nextExerciseIndex(activeWorkout, currentExerciseIndex) : null;
       const nextName = ni != null ? activeWorkout!.exercises[ni].name : 'next exercise';
@@ -118,23 +125,38 @@ export const useWorkoutStore = create<WorkoutState>((set, get) => {
       alertBody = `Next: ${nextName}`;
       statusTitle = `SETUP · next: ${nextName}`;
       statusBody = remaining != null ? `ready at ${endClock(remaining)}` : '';
+      actions = [ACTION_NEXT_EXERCISE];
     } else if (currentPhase === 'amrap') {
       statusTitle = `AMRAP · ${ex.name}`;
-      statusBody = 'counting up — tap DONE in app';
+      statusBody = 'to failure — tap Done when finished';
+      actions = [ACTION_DONE];
     } else {
       // set / timed
-      alertTitle = 'Set complete';
-      alertBody = `${ex.name} · set ${currentSetNumber} done — tap DONE`;
+      alertTitle = 'Set time reached';
+      alertBody = `${ex.name} · set ${currentSetNumber} — tap Done when finished`;
       statusTitle = `SET ${currentSetNumber}/${ex.sets} · ${ex.name}`;
       statusBody = remaining != null ? `target ${endClock(remaining)}` : '';
+      actions = [ACTION_DONE];
     }
 
     if (currentPhase !== 'amrap' && remaining != null && remaining > 0) {
-      scheduleAlert(remaining, alertTitle, alertBody).then((id) => set({ pendingAlertId: id }));
+      scheduleAlert(remaining, alertTitle, alertBody, actions).then((id) => set({ pendingAlertId: id }));
     } else {
       set({ pendingAlertId: null });
     }
-    presentOngoing(statusTitle, statusBody).then((id) => set({ ongoingId: id }));
+
+    // Live ticking timer in the shade: countdown to the target for timed
+    // phases, count-up from the start for AMRAP.
+    const ongoingOpts: OngoingOptions = { actions };
+    if (currentPhase === 'amrap') {
+      ongoingOpts.chronometer = { direction: 'up', timestamp: phaseStartedAt };
+    } else if (targetDuration != null) {
+      ongoingOpts.chronometer = {
+        direction: 'down',
+        timestamp: phaseStartedAt + targetDuration * 1000,
+      };
+    }
+    presentOngoing(statusTitle, statusBody, ongoingOpts).then((id) => set({ ongoingId: id }));
   }
 
   return {

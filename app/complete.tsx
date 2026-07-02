@@ -5,9 +5,10 @@ import {
   useWindowDimensions, View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { CameraIcon, CheckIcon } from '../src/components/icons';
+import { CameraIcon, CheckIcon, DownloadIcon } from '../src/components/icons';
 import { useHistoryStore } from '../src/store/historyStore';
-import { useTrackerStore } from '../src/store/trackerStore';
+import { useTrackerStore, currentWeekKey } from '../src/store/trackerStore';
+import { exportWeekFiles } from '../src/utils/exportWeek';
 import { formatHoursMinutes } from '../src/utils/time';
 import { runBodyweightCapture, runTrackerCapture } from '../src/utils/trackerCapture';
 import { handleBodyweightResult, handleCaptureResult, promptCaptureSource } from './tracker';
@@ -18,12 +19,38 @@ export default function CompleteScreen() {
   const sessions = useHistoryStore((s) => s.sessions);
   const latest = sessions[0] ?? null;
   const addBodyweight = useTrackerStore((s) => s.addBodyweight);
+  const trackerEntries = useTrackerStore((s) => s.entries);
+  const bodyweights = useTrackerStore((s) => s.bodyweights);
+  const lastExportWeekKey = useTrackerStore((s) => s.lastExportWeekKey);
   const [capturing, setCapturing] = useState(false);
   const [weighing, setWeighing] = useState(false);
   const [weightDraft, setWeightDraft] = useState('');
   const [weightSaved, setWeightSaved] = useState(false);
+  const [exported, setExported] = useState(false);
 
   const isMonday = latest?.day === 'monday';
+  // Friday is the last training day of the week — offer the weekly export
+  // right here so it isn't forgotten over the weekend.
+  const week = currentWeekKey();
+  const isFriday = latest?.day === 'friday';
+  const weekExported = exported || lastExportWeekKey === week;
+
+  async function exportThisWeek() {
+    const entries = trackerEntries.filter((e) => e.weekKey === week);
+    const bw = bodyweights.filter((b) => b.weekKey === week);
+    const result = await exportWeekFiles(entries, bw, week);
+    if (result === 'nothing') {
+      Alert.alert(
+        'Nothing to export yet',
+        'Log this week’s tracker pages first — then export.',
+      );
+      return;
+    }
+    if (typeof result === 'object') {
+      Alert.alert('Sharing unavailable', `Files written to:\n${result.savedTo}`);
+    }
+    setExported(true);
+  }
 
   function capturePage() {
     promptCaptureSource(async (source) => {
@@ -122,6 +149,37 @@ export default function CompleteScreen() {
             </View>
           ))}
         </View>
+
+        {isFriday && (
+          <View style={styles.bwCard}>
+            <Text style={styles.bwTitle}>Week wrap-up</Text>
+            {weekExported ? (
+              <View style={styles.bwSavedRow}>
+                <CheckIcon size={16} color="#22D46E" strokeWidth={3} />
+                <Text style={styles.bwSaved}>Week exported — enjoy the weekend.</Text>
+              </View>
+            ) : (
+              <>
+                <Text style={styles.exportHint}>
+                  Friday's the last session of the week. Capture the tracker page above, then export
+                  the week's CSV + JSON backup now so Monday-you doesn't have to remember.
+                </Text>
+                <TouchableOpacity
+                  style={styles.exportWeekBtn}
+                  onPress={exportThisWeek}
+                  activeOpacity={0.8}
+                  accessibilityRole="button"
+                  accessibilityLabel="Export this week"
+                >
+                  <View style={styles.busyRow}>
+                    <DownloadIcon size={16} color="#22D46E" />
+                    <Text style={styles.exportWeekText}>Export week (CSV + JSON)</Text>
+                  </View>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        )}
 
         {isMonday && (
           <View style={styles.bwCard}>
@@ -260,6 +318,12 @@ const styles = StyleSheet.create({
   bwPhotoText: { color: '#22D46E', fontWeight: '700', fontSize: 14 },
   bwSavedRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   bwSaved: { flex: 1, fontSize: 14, color: '#22D46E', fontWeight: '600' },
+  exportHint: { fontSize: 13, color: '#888', lineHeight: 19, marginBottom: 12 },
+  exportWeekBtn: {
+    height: 44, borderRadius: 8, borderWidth: 1.5, borderColor: 'rgba(34,212,110,0.4)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  exportWeekText: { color: '#22D46E', fontWeight: '700', fontSize: 14 },
 
   ctaContainer: {
     position: 'absolute', left: 0, right: 0, bottom: 0,

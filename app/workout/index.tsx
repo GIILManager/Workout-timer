@@ -25,10 +25,14 @@ import { useHistoryStore } from '../../src/store/historyStore';
 import { useWorkoutStore, getNextExercise } from '../../src/store/workoutStore';
 import { useTimer } from '../../src/hooks/useTimer';
 import { useWorkoutDuration } from '../../src/hooks/useWorkoutDuration';
-import { getAdaptedTiming, getAdaptedTransition } from '../../src/utils/timing';
 import { formatTime, formatElapsed } from '../../src/utils/time';
 import { stopAlert } from '../../src/utils/alertService';
-import { SetRecord, TimingRecord } from '../../src/types';
+import {
+  completeCurrentSet,
+  continueToNextExercise,
+  skipBreak,
+  startNextSet,
+} from '../../src/utils/workoutActions';
 
 /** Primary/secondary CTA with icon, press haptic, and a compact variant. */
 function CtaButton({
@@ -93,13 +97,10 @@ export default function WorkoutScreen() {
     : Math.max(160, Math.min(300, width - 96, height - 430));
 
   const store = useWorkoutStore();
-  const { addTimingRecord, saveSession } = useHistoryStore();
   const settings = useHistoryStore((s) => s.settings);
-  const timingRecords = useHistoryStore((s) => s.timingRecords);
 
   const {
     activeWorkout,
-    sessionId,
     sessionStartedAt,
     currentExerciseIndex,
     currentSetNumber,
@@ -137,128 +138,24 @@ export default function WorkoutScreen() {
     return Math.min(1, elapsed / targetDuration);
   })();
 
-  const finishSession = useCallback(async () => {
-    const freshState = useWorkoutStore.getState();
-    const { sessionId: sid, sessionStartedAt: startedAt, activeWorkout: workout, setRecords: records } = freshState;
-    if (!sid || !startedAt || !workout) return;
-    const totalDuration = (Date.now() - startedAt) / 1000;
-    const distinctExercises = new Set(records.map((r) => r.exerciseId)).size;
-    await saveSession({
-      id: sid,
-      day: workout.day,
-      date: new Date().toISOString(),
-      totalDuration,
-      exercisesCompleted: distinctExercises,
-      setRecords: records,
-    });
-    store.reset();
-    router.replace('/complete');
-  }, [saveSession]);
+  // Phase logic lives in workoutActions (shared with the notification action
+  // buttons); the screen just invokes it. Navigation to /complete on finish
+  // happens inside the actions.
+  const handleCompleteSet = useCallback(() => {
+    completeCurrentSet();
+  }, []);
 
-  // SET / AMRAP / TIMED finished → record the set, then break, transition, or finish.
-  const handleCompleteSet = useCallback(async () => {
-    if (!exercise || !sessionId || !phaseStartedAt) return;
-    stopAlert();
+  const handleStartNextSet = useCallback(() => {
+    startNextSet();
+  }, []);
 
-    const actualSetDuration = isAmrap ? null : (Date.now() - phaseStartedAt) / 1000;
-    const timing = getAdaptedTiming(exercise.id, exercise.type, timingRecords, settings);
-
-    const setRecord: SetRecord = {
-      exerciseId: exercise.id,
-      exerciseName: exercise.name,
-      setNumber: currentSetNumber,
-      predictedSetDuration: timing.setDuration,
-      actualSetDuration,
-      predictedBreakDuration: timing.breakDuration,
-      actualBreakDuration: 0,
-      completedAt: new Date().toISOString(),
-    };
-    store.addSetRecord(setRecord);
-
-    // Learn the set duration now (break/transition is recorded when it ends).
-    await addTimingRecord({
-      exerciseId: exercise.id,
-      setNumber: currentSetNumber,
-      setDuration: actualSetDuration,
-      breakDuration: null,
-      date: new Date().toISOString(),
-      sessionId,
-    });
-
-    const isLastSet = currentSetNumber >= exercise.sets;
-    if (!isLastSet) {
-      store.startBreak(timing.breakDuration);
-      return;
-    }
-    const next = getNextExercise();
-    if (next) {
-      store.startTransition(getAdaptedTransition(next.id, timingRecords, settings));
-    } else {
-      await finishSession();
-    }
-  }, [exercise, sessionId, phaseStartedAt, isAmrap, currentSetNumber, timingRecords, settings, finishSession]);
-
-  // BREAK finished (always within the same exercise now) → next set.
-  const handleStartNextSet = useCallback(async () => {
-    if (!exercise || !sessionId || !phaseStartedAt) return;
-    stopAlert();
-    const actualBreakDuration = (Date.now() - phaseStartedAt) / 1000;
-    store.patchLastBreak(actualBreakDuration);
-
-    const timingRecord: TimingRecord = {
-      exerciseId: exercise.id,
-      setNumber: currentSetNumber,
-      setDuration: null,
-      breakDuration: actualBreakDuration,
-      date: new Date().toISOString(),
-      sessionId,
-    };
-    await addTimingRecord(timingRecord);
-
-    store.completeBreak(actualBreakDuration);
-    const timing = getAdaptedTiming(exercise.id, exercise.type, timingRecords, settings);
-    store.startSet(timing.setDuration);
-  }, [exercise, sessionId, phaseStartedAt, currentSetNumber, timingRecords, settings]);
-
-  // SKIP BREAK → record the actual (short) break for history, but don't feed it
-  // into learning (a deliberate skip isn't representative of needed rest).
   const handleSkipBreak = useCallback(() => {
-    if (!exercise || !phaseStartedAt) return;
-    stopAlert();
-    const actualBreakDuration = (Date.now() - phaseStartedAt) / 1000;
-    store.patchLastBreak(actualBreakDuration);
-    store.completeBreak(actualBreakDuration);
-    const timing = getAdaptedTiming(exercise.id, exercise.type, timingRecords, settings);
-    store.startSet(timing.setDuration);
-  }, [exercise, phaseStartedAt, timingRecords, settings]);
+    skipBreak();
+  }, []);
 
-  // TRANSITION finished → learn the setup time, advance to next exercise.
-  const handleContinueToNext = useCallback(async (record: boolean) => {
-    if (!sessionId || !phaseStartedAt) return;
-    stopAlert();
-    const actualTransition = (Date.now() - phaseStartedAt) / 1000;
-    const next = getNextExercise();
-    if (record && next) {
-      await addTimingRecord({
-        exerciseId: next.id,
-        setNumber: 0,
-        setDuration: null,
-        breakDuration: actualTransition,
-        date: new Date().toISOString(),
-        sessionId,
-        transition: true,
-      });
-    }
-    const hasMore = store.advanceToNextExercise();
-    if (hasMore) {
-      const freshIdx = useWorkoutStore.getState().currentExerciseIndex;
-      const nextEx = activeWorkout!.exercises[freshIdx];
-      const timing = getAdaptedTiming(nextEx.id, nextEx.type, timingRecords, settings);
-      store.startSet(timing.setDuration);
-    } else {
-      await finishSession();
-    }
-  }, [sessionId, phaseStartedAt, timingRecords, settings, activeWorkout, finishSession]);
+  const handleContinueToNext = useCallback((record: boolean) => {
+    continueToNextExercise(record);
+  }, []);
 
   const handleTogglePause = useCallback(() => {
     if (isPaused) store.resume();

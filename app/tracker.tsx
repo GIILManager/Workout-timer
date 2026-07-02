@@ -1,6 +1,4 @@
 import { router } from 'expo-router';
-import * as FileSystem from 'expo-file-system';
-import * as Sharing from 'expo-sharing';
 import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -28,8 +26,8 @@ import {
   CaptureResult,
   CaptureSource,
 } from '../src/utils/trackerCapture';
-import { buildWeekCsv } from '../src/utils/csv';
-import { BodyweightEntry, TrackerEntry, TrackerSet } from '../src/types';
+import { exportWeekFiles } from '../src/utils/exportWeek';
+import { BodyweightEntry, TrackerEntry, TrackerExercise, TrackerSet } from '../src/types';
 
 /** Ask whether to use the camera or an existing photo, then run the chosen flow. */
 export function promptCaptureSource(
@@ -108,6 +106,130 @@ function describeSet(s: TrackerSet): string {
   return `${reps}${flag}${w}`;
 }
 
+interface SetDraft {
+  reps: string;
+  weight: string;
+  duration: string;
+}
+
+/**
+ * Inline correction of a parsed page before it goes into the weekly CSV —
+ * fix a misread weight here instead of re-photographing. A manually corrected
+ * value is confirmed by a human, so its "inferred" flag is cleared.
+ */
+function EntryEditor({ entry, onClose }: { entry: TrackerEntry; onClose: () => void }) {
+  const updateEntry = useTrackerStore((s) => s.updateEntry);
+  const [drafts, setDrafts] = useState<SetDraft[][]>(() =>
+    entry.exercises.map((ex) =>
+      ex.sets.map((s) => ({
+        reps: s.reps != null ? String(s.reps) : '',
+        weight: s.weight != null ? String(s.weight) : '',
+        duration: s.durationSeconds != null ? String(s.durationSeconds) : '',
+      })),
+    ),
+  );
+  const [notes, setNotes] = useState(entry.notes ?? '');
+
+  function patch(i: number, j: number, field: keyof SetDraft, value: string) {
+    setDrafts((cur) =>
+      cur.map((ex, a) => (a !== i ? ex : ex.map((s, b) => (b !== j ? s : { ...s, [field]: value })))),
+    );
+  }
+
+  const toNum = (v: string): number | null => {
+    const n = parseFloat(v.replace(',', '.'));
+    return Number.isFinite(n) ? n : null;
+  };
+
+  async function save() {
+    const exercises: TrackerExercise[] = entry.exercises.map((ex, i) => ({
+      ...ex,
+      sets: ex.sets.map((s, j) => {
+        const d = drafts[i][j];
+        const reps = toNum(d.reps);
+        const weight = toNum(d.weight);
+        const durationSeconds = toNum(d.duration);
+        const changed =
+          reps !== s.reps || weight !== s.weight || durationSeconds !== (s.durationSeconds ?? null);
+        return { ...s, reps, weight, durationSeconds, inferred: changed ? false : s.inferred };
+      }),
+    }));
+    await updateEntry(entry.id, { exercises, notes: notes.trim() ? notes.trim() : undefined });
+    onClose();
+  }
+
+  return (
+    <View>
+      {entry.exercises.map((ex, i) => (
+        <View key={i} style={styles.editExercise}>
+          <Text style={styles.exName}>
+            {ex.name}
+            {ex.target ? <Text style={styles.exTarget}>  ({ex.target})</Text> : null}
+          </Text>
+          {ex.sets.map((s, j) => (
+            <View key={j} style={styles.editSetRow}>
+              <Text style={styles.editSetLabel}>S{s.setNumber}</Text>
+              {s.durationSeconds != null ? (
+                <>
+                  <TextInput
+                    style={styles.editInput}
+                    value={drafts[i][j].duration}
+                    onChangeText={(v) => patch(i, j, 'duration', v)}
+                    keyboardType="numeric"
+                    placeholder="–"
+                    placeholderTextColor="#555"
+                  />
+                  <Text style={styles.editUnit}>sec</Text>
+                </>
+              ) : (
+                <>
+                  <TextInput
+                    style={styles.editInput}
+                    value={drafts[i][j].reps}
+                    onChangeText={(v) => patch(i, j, 'reps', v)}
+                    keyboardType="numeric"
+                    placeholder="reps"
+                    placeholderTextColor="#555"
+                  />
+                  <Text style={styles.editUnit}>×</Text>
+                  <TextInput
+                    style={styles.editInput}
+                    value={drafts[i][j].weight}
+                    onChangeText={(v) => patch(i, j, 'weight', v)}
+                    keyboardType="decimal-pad"
+                    placeholder="bw"
+                    placeholderTextColor="#555"
+                  />
+                  <Text style={styles.editUnit}>kg</Text>
+                </>
+              )}
+              {s.raw ? <Text style={styles.editRaw}>“{s.raw}”</Text> : null}
+            </View>
+          ))}
+        </View>
+      ))}
+
+      <TextInput
+        style={styles.editNotes}
+        value={notes}
+        onChangeText={setNotes}
+        placeholder="Notes / PRs / form cues"
+        placeholderTextColor="#555"
+        multiline
+      />
+
+      <View style={styles.editBtnRow}>
+        <TouchableOpacity style={styles.editSaveBtn} onPress={save} accessibilityRole="button" accessibilityLabel="Save corrections">
+          <Text style={styles.editSaveText}>Save</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.editCancelBtn} onPress={onClose} accessibilityRole="button" accessibilityLabel="Cancel editing">
+          <Text style={styles.editCancelText}>Cancel</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
 export default function TrackerScreen() {
   const entries = useTrackerStore((s) => s.entries);
   const bodyweights = useTrackerStore((s) => s.bodyweights);
@@ -119,6 +241,7 @@ export default function TrackerScreen() {
 
   const [busy, setBusy] = useState<null | 'capturing' | 'weighing'>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [weightDraft, setWeightDraft] = useState('');
 
   const week = currentWeekKey();
@@ -126,20 +249,16 @@ export default function TrackerScreen() {
   const weekBw = useMemo(() => bodyweights.filter((b) => b.weekKey === week), [bodyweights, week]);
   const olderCount = entries.length - thisWeek.length + (bodyweights.length - weekBw.length);
 
-  async function exportCsv(toExport: TrackerEntry[], bw: BodyweightEntry[], label: string) {
-    if (toExport.length === 0 && bw.length === 0) {
+  async function exportWeek(toExport: TrackerEntry[], bw: BodyweightEntry[], label: string) {
+    const result = await exportWeekFiles(toExport, bw, label);
+    if (result === 'nothing') {
       Alert.alert('Nothing to export', 'No entries for this period yet.');
-      return null;
+      return false;
     }
-    const csv = buildWeekCsv(toExport, bw);
-    const uri = `${FileSystem.cacheDirectory}workout-${label}.csv`;
-    await FileSystem.writeAsStringAsync(uri, csv, { encoding: FileSystem.EncodingType.UTF8 });
-    if (await Sharing.isAvailableAsync()) {
-      await Sharing.shareAsync(uri, { mimeType: 'text/csv', dialogTitle: `Workout tracker — ${label}` });
-    } else {
-      Alert.alert('Sharing unavailable', `CSV written to:\n${uri}`);
+    if (typeof result === 'object') {
+      Alert.alert('Sharing unavailable', `Files written to:\n${result.savedTo}`);
     }
-    return uri;
+    return true;
   }
 
   function handleCapture() {
@@ -191,8 +310,8 @@ export default function TrackerScreen() {
         {
           text: 'Export & Clear',
           onPress: async () => {
-            const uri = await exportCsv(older, olderBw, 'previous-weeks');
-            if (uri) await clearWeeksBefore(week);
+            const ok = await exportWeek(older, olderBw, 'previous-weeks');
+            if (ok) await clearWeeksBefore(week);
           },
         },
       ],
@@ -336,20 +455,39 @@ export default function TrackerScreen() {
 
               {expanded && (
                 <View style={styles.cardBody}>
-                  {entry.exercises.map((ex, i) => (
-                    <View key={i} style={styles.exRow}>
-                      <Text style={styles.exName}>
-                        {ex.name}
-                        {ex.target ? <Text style={styles.exTarget}>  ({ex.target})</Text> : null}
-                      </Text>
-                      <Text style={styles.exSets}>{ex.sets.map(describeSet).join('   ')}</Text>
-                    </View>
-                  ))}
-                  {entry.notes ? <Text style={styles.entryNotes}>Notes: {entry.notes}</Text> : null}
-                  <Text style={styles.legend}>* reps inferred from target (bare weight written)</Text>
-                  <TouchableOpacity onPress={() => confirmDelete(entry.id)} style={styles.deleteBtn}>
-                    <Text style={styles.deleteText}>Delete entry</Text>
-                  </TouchableOpacity>
+                  {editingId === entry.id ? (
+                    <EntryEditor entry={entry} onClose={() => setEditingId(null)} />
+                  ) : (
+                    <>
+                      {entry.exercises.map((ex, i) => (
+                        <View key={i} style={styles.exRow}>
+                          <Text style={styles.exName}>
+                            {ex.name}
+                            {ex.target ? <Text style={styles.exTarget}>  ({ex.target})</Text> : null}
+                          </Text>
+                          <Text style={styles.exSets}>{ex.sets.map(describeSet).join('   ')}</Text>
+                        </View>
+                      ))}
+                      {entry.notes ? <Text style={styles.entryNotes}>Notes: {entry.notes}</Text> : null}
+                      <Text style={styles.legend}>* reps inferred from target (bare weight written)</Text>
+                      <View style={styles.entryActions}>
+                        <TouchableOpacity
+                          onPress={() => setEditingId(entry.id)}
+                          accessibilityRole="button"
+                          accessibilityLabel="Edit entry"
+                        >
+                          <Text style={styles.editText}>Edit</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          onPress={() => confirmDelete(entry.id)}
+                          accessibilityRole="button"
+                          accessibilityLabel="Delete entry"
+                        >
+                          <Text style={styles.deleteText}>Delete entry</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </>
+                  )}
                 </View>
               )}
             </View>
@@ -359,14 +497,14 @@ export default function TrackerScreen() {
         {(thisWeek.length > 0 || weekBw.length > 0) && (
           <TouchableOpacity
             style={styles.exportBtn}
-            onPress={() => exportCsv(thisWeek, weekBw, week)}
+            onPress={() => exportWeek(thisWeek, weekBw, week)}
             activeOpacity={0.8}
             accessibilityRole="button"
-            accessibilityLabel="Export this week as CSV"
+            accessibilityLabel="Export this week as CSV and JSON backup"
           >
             <View style={styles.busyRow}>
               <DownloadIcon size={17} color="#888" />
-              <Text style={styles.exportText}>Export this week (CSV)</Text>
+              <Text style={styles.exportText}>Export week (CSV + JSON)</Text>
             </View>
           </TouchableOpacity>
         )}
@@ -463,8 +601,39 @@ const styles = StyleSheet.create({
   exSets: { fontSize: 13, color: '#888', marginTop: 3, fontVariant: ['tabular-nums'] },
   entryNotes: { fontSize: 12, color: '#888', marginTop: 10, lineHeight: 18, fontStyle: 'italic' },
   legend: { fontSize: 11, color: '#555', marginTop: 8 },
-  deleteBtn: { paddingTop: 12, alignItems: 'flex-start' },
+  entryActions: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingTop: 14, paddingBottom: 4,
+  },
+  editText: { fontSize: 13, color: '#22D46E', fontWeight: '700' },
   deleteText: { fontSize: 13, color: '#EF4444', fontWeight: '600' },
+
+  editExercise: { paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#1A1A1A' },
+  editSetRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 },
+  editSetLabel: { width: 26, fontSize: 12, fontWeight: '700', color: '#888' },
+  editInput: {
+    width: 64, height: 40, borderRadius: 8, paddingHorizontal: 10, textAlign: 'center',
+    backgroundColor: '#1C1C1C', borderWidth: 1, borderColor: '#2A2A2A',
+    color: '#F0F0F0', fontSize: 14, fontVariant: ['tabular-nums'],
+  },
+  editUnit: { fontSize: 13, color: '#888' },
+  editRaw: { flex: 1, fontSize: 11, color: '#555', textAlign: 'right' },
+  editNotes: {
+    marginTop: 12, minHeight: 56, borderRadius: 8, padding: 10,
+    backgroundColor: '#1C1C1C', borderWidth: 1, borderColor: '#2A2A2A',
+    color: '#F0F0F0', fontSize: 13, textAlignVertical: 'top',
+  },
+  editBtnRow: { flexDirection: 'row', gap: 8, marginTop: 12, marginBottom: 4 },
+  editSaveBtn: {
+    flex: 1, height: 44, borderRadius: 8, backgroundColor: '#22D46E',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  editSaveText: { color: '#000', fontWeight: '800', fontSize: 14 },
+  editCancelBtn: {
+    flex: 1, height: 44, borderRadius: 8, borderWidth: 1, borderColor: '#2A2A2A',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  editCancelText: { color: '#888', fontWeight: '600', fontSize: 14 },
 
   exportBtn: {
     marginTop: 16, height: 48, borderRadius: 12, borderWidth: 1.5, borderColor: '#262626',

@@ -4,24 +4,30 @@ import * as Crypto from 'expo-crypto';
 import { BodyweightEntry, TrackerEntry } from '../types';
 import { weekKey } from '../utils/week';
 
-const KEYS = {
+export const TRACKER_KEYS = {
   entries: 'tracker_entries',
   bodyweight: 'tracker_bodyweight',
   apiKey: 'claude_api_key',
+  lastExport: 'tracker_last_export',
 } as const;
+const KEYS = TRACKER_KEYS;
 
 interface TrackerState {
   entries: TrackerEntry[];
   bodyweights: BodyweightEntry[];
   apiKey: string;
+  /** ISO week key of the most recent export — silences that week's reminder. */
+  lastExportWeekKey: string | null;
   hydrated: boolean;
 
   hydrate: () => Promise<void>;
   setApiKey: (key: string) => Promise<void>;
   addEntry: (entry: TrackerEntry) => Promise<void>;
+  updateEntry: (id: string, patch: Partial<TrackerEntry>) => Promise<void>;
   deleteEntry: (id: string) => Promise<void>;
   addBodyweight: (kg: number, date?: Date) => Promise<void>;
   deleteBodyweight: (id: string) => Promise<void>;
+  markExported: (week: string) => Promise<void>;
   /** Drop every entry AND bodyweight whose weekKey is not the current week. */
   clearWeeksBefore: (currentWeek: string) => Promise<void>;
 }
@@ -30,19 +36,22 @@ export const useTrackerStore = create<TrackerState>((set, get) => ({
   entries: [],
   bodyweights: [],
   apiKey: '',
+  lastExportWeekKey: null,
   hydrated: false,
 
   async hydrate() {
     try {
-      const [rawEntries, rawBw, rawKey] = await Promise.all([
+      const [rawEntries, rawBw, rawKey, rawExport] = await Promise.all([
         AsyncStorage.getItem(KEYS.entries),
         AsyncStorage.getItem(KEYS.bodyweight),
         AsyncStorage.getItem(KEYS.apiKey),
+        AsyncStorage.getItem(KEYS.lastExport),
       ]);
       set({
         entries: rawEntries ? JSON.parse(rawEntries) : [],
         bodyweights: rawBw ? JSON.parse(rawBw) : [],
         apiKey: rawKey ?? '',
+        lastExportWeekKey: rawExport,
         hydrated: true,
       });
     } catch {
@@ -58,6 +67,12 @@ export const useTrackerStore = create<TrackerState>((set, get) => ({
 
   async addEntry(entry) {
     const next = [entry, ...get().entries];
+    set({ entries: next });
+    await AsyncStorage.setItem(KEYS.entries, JSON.stringify(next));
+  },
+
+  async updateEntry(id, patch) {
+    const next = get().entries.map((e) => (e.id === id ? { ...e, ...patch } : e));
     set({ entries: next });
     await AsyncStorage.setItem(KEYS.entries, JSON.stringify(next));
   },
@@ -84,6 +99,11 @@ export const useTrackerStore = create<TrackerState>((set, get) => ({
     const next = get().bodyweights.filter((b) => b.id !== id);
     set({ bodyweights: next });
     await AsyncStorage.setItem(KEYS.bodyweight, JSON.stringify(next));
+  },
+
+  async markExported(week) {
+    set({ lastExportWeekKey: week });
+    await AsyncStorage.setItem(KEYS.lastExport, week);
   },
 
   async clearWeeksBefore(currentWeek) {

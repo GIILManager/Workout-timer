@@ -3,11 +3,12 @@ import { create } from 'zustand';
 import { TimingRecord, UserSettings, WorkoutSession } from '../types';
 import { DEFAULT_SETTINGS } from '../utils/timing';
 
-const KEYS = {
+export const HISTORY_KEYS = {
   timingHistory: 'timing_history',
   sessionHistory: 'session_history',
   userSettings: 'user_settings',
 } as const;
+const KEYS = HISTORY_KEYS;
 
 interface HistoryState {
   timingRecords: TimingRecord[];
