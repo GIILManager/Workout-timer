@@ -1,6 +1,6 @@
 import * as Haptics from 'expo-haptics';
 import { Vibration } from 'react-native';
-import { Audio } from 'expo-av';
+import { Audio, InterruptionModeAndroid } from 'expo-av';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const BEEP = require('../../assets/sounds/beep.wav');
@@ -19,6 +19,7 @@ async function ensureSound(): Promise<void> {
         await Audio.setAudioModeAsync({
           playsInSilentModeIOS: true,
           shouldDuckAndroid: true,
+          interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,
           staysActiveInBackground: false,
         });
         const { sound: s } = await Audio.Sound.createAsync(BEEP);
@@ -43,6 +44,20 @@ async function playBeep(): Promise<void> {
 }
 
 /**
+ * Release Android audio focus. expo-av only abandons focus on an explicit
+ * stop/pause — a sound that finishes playing on its own keeps background
+ * music ducked (expo/expo#19042). Every alert path must end here so the
+ * user's music returns to full volume as soon as the alert is done, not
+ * when the next phase starts.
+ */
+function releaseAudioFocus(): void {
+  if (sound) {
+    sound.stopAsync().catch(() => {});
+    sound.setIsLoopingAsync(false).catch(() => {});
+  }
+}
+
+/**
  * Short multi-pulse alert: sound + heavy haptic, repeated `pulses` times, then
  * silence. Used for the BREAK / transition end so you know the rest is over.
  */
@@ -60,9 +75,12 @@ export async function triggerTimerAlert(pulses = 2): Promise<void> {
     if (count < pulses) {
       pulseTimeout = setTimeout(fire, 700);
     } else {
+      // Last beep (~0.3s) has finished by now; stop the player so Android
+      // audio focus is abandoned and background music unducks immediately.
       pulseTimeout = setTimeout(() => {
-        alertBusy = false;
         pulseTimeout = null;
+        releaseAudioFocus();
+        alertBusy = false;
       }, 700);
     }
   };
@@ -110,10 +128,7 @@ export function stopAlert(): void {
   try {
     Vibration.cancel();
   } catch {}
-  if (sound) {
-    sound.stopAsync().catch(() => {});
-    sound.setIsLoopingAsync(false).catch(() => {});
-  }
+  releaseAudioFocus();
   alertBusy = false;
 }
 

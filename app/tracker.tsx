@@ -13,6 +13,13 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import {
+  CameraIcon,
+  ChevronDownIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  DownloadIcon,
+} from '../src/components/icons';
 import { useTrackerStore, currentWeekKey } from '../src/store/trackerStore';
 import {
   runTrackerCapture,
@@ -202,13 +209,21 @@ export default function TrackerScreen() {
   return (
     <SafeAreaView style={styles.screen}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-          <Text style={styles.backIcon}>‹</Text>
+        <TouchableOpacity
+          style={styles.backBtn}
+          onPress={() => router.back()}
+          accessibilityRole="button"
+          accessibilityLabel="Back"
+        >
+          <ChevronLeftIcon size={24} color="#888" />
         </TouchableOpacity>
         <Text style={styles.title}>TRACKER</Text>
       </View>
 
-      <ScrollView contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 140 }}>
+      <ScrollView
+        contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 140 }}
+        keyboardShouldPersistTaps="handled"
+      >
         {!apiKey && (
           <TouchableOpacity style={styles.warnCard} onPress={() => router.push('/settings')} activeOpacity={0.8}>
             <Text style={styles.warnTitle}>Add your Anthropic API key</Text>
@@ -223,7 +238,10 @@ export default function TrackerScreen() {
             <Text style={styles.rolloverText}>
               {olderCount} entr{olderCount === 1 ? 'y' : 'ies'} from previous weeks
             </Text>
-            <Text style={styles.rolloverAction}>EXPORT & CLEAR ▸</Text>
+            <View style={styles.rolloverActionRow}>
+              <Text style={styles.rolloverAction}>EXPORT & CLEAR</Text>
+              <ChevronRightIcon size={13} color="#3B82F6" strokeWidth={3} />
+            </View>
           </TouchableOpacity>
         )}
 
@@ -257,7 +275,10 @@ export default function TrackerScreen() {
                 <Text style={styles.bwPhotoText}>Reading scale…</Text>
               </View>
             ) : (
-              <Text style={styles.bwPhotoText}>📷  Snap the scale instead</Text>
+              <View style={styles.busyRow}>
+                <CameraIcon size={16} color="#22D46E" />
+                <Text style={styles.bwPhotoText}>Snap the scale instead</Text>
+              </View>
             )}
           </TouchableOpacity>
           {weekBw.length === 0 ? (
@@ -306,7 +327,11 @@ export default function TrackerScreen() {
                     {entry.capturedAt.slice(0, 10)}{sub ? ` · ${sub}` : ''} · {entry.exercises.length} exercises · {setCount} sets
                   </Text>
                 </View>
-                <Text style={styles.chevron}>{expanded ? '▾' : '▸'}</Text>
+                {expanded ? (
+                  <ChevronDownIcon size={16} color="#888" />
+                ) : (
+                  <ChevronRightIcon size={16} color="#888" />
+                )}
               </TouchableOpacity>
 
               {expanded && (
@@ -332,8 +357,17 @@ export default function TrackerScreen() {
         })}
 
         {(thisWeek.length > 0 || weekBw.length > 0) && (
-          <TouchableOpacity style={styles.exportBtn} onPress={() => exportCsv(thisWeek, weekBw, week)} activeOpacity={0.8}>
-            <Text style={styles.exportText}>⬇  Export this week (CSV)</Text>
+          <TouchableOpacity
+            style={styles.exportBtn}
+            onPress={() => exportCsv(thisWeek, weekBw, week)}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Export this week as CSV"
+          >
+            <View style={styles.busyRow}>
+              <DownloadIcon size={17} color="#888" />
+              <Text style={styles.exportText}>Export this week (CSV)</Text>
+            </View>
           </TouchableOpacity>
         )}
       </ScrollView>
@@ -344,6 +378,8 @@ export default function TrackerScreen() {
           onPress={handleCapture}
           disabled={busy != null}
           activeOpacity={0.85}
+          accessibilityRole="button"
+          accessibilityLabel="Capture tracker page"
         >
           {busy === 'capturing' ? (
             <View style={styles.busyRow}>
@@ -351,7 +387,10 @@ export default function TrackerScreen() {
               <Text style={styles.captureText}>Reading page…</Text>
             </View>
           ) : (
-            <Text style={styles.captureText}>📷  Capture page</Text>
+            <View style={styles.busyRow}>
+              <CameraIcon size={19} color="#000" />
+              <Text style={styles.captureText}>Capture page</Text>
+            </View>
           )}
         </TouchableOpacity>
       </View>
@@ -366,7 +405,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4,
   },
   backBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', marginLeft: -10 },
-  backIcon: { fontSize: 28, color: '#888', lineHeight: 32 },
   title: { flex: 1, fontSize: 18, fontWeight: '700', color: '#F0F0F0' },
 
   warnCard: {
@@ -382,6 +420,7 @@ const styles = StyleSheet.create({
     borderRadius: 12, padding: 16, marginTop: 12,
   },
   rolloverText: { flex: 1, fontSize: 13, fontWeight: '600', color: '#F0F0F0' },
+  rolloverActionRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   rolloverAction: { fontSize: 12, fontWeight: '800', color: '#3B82F6', letterSpacing: 0.5 },
 
   sectionLabel: {
@@ -417,7 +456,6 @@ const styles = StyleSheet.create({
   cardHeader: { flexDirection: 'row', alignItems: 'center', padding: 16, gap: 12 },
   cardTitle: { fontSize: 15, fontWeight: '600', color: '#F0F0F0' },
   cardMeta: { fontSize: 12, color: '#888', marginTop: 4 },
-  chevron: { fontSize: 16, color: '#888' },
   cardBody: { paddingHorizontal: 16, paddingBottom: 12, borderTopWidth: 1, borderTopColor: '#1A1A1A', paddingTop: 8 },
   exRow: { paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#1A1A1A' },
   exName: { fontSize: 14, fontWeight: '500', color: '#F0F0F0' },
